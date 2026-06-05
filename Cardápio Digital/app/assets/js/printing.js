@@ -1,0 +1,145 @@
+// =============================================================================
+// IMPRESSÃO TÉRMICA ESC/POS via Web Serial (Chrome/Edge no desktop).
+// Via do entregador (2 vias) + via de produção (1 papel por item).
+// Acentos são normalizados para ASCII p/ sair limpo em qualquer térmica.
+// QZ Tray fica como alternativa (veja docs/GUIA-IMPRESSORA.md).
+// =============================================================================
+
+const ESC = 0x1b, GS = 0x1d, LF = 0x0a;
+const WIDTH = 32; // 58mm = 32 colunas (use 48 para 80mm)
+
+const noAccent = (s) => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '');
+const enc = new TextEncoder();
+
+// Construtor de comandos ESC/POS
+class Ticket {
+  constructor() { this.parts = []; this.cmd(ESC, 0x40); } // init
+  cmd(...b) { this.parts.push(new Uint8Array(b)); return this; }
+  raw(bytes) { this.parts.push(bytes); return this; }
+  align(a) { return this.cmd(ESC, 0x61, a); }          // 0 esq, 1 centro, 2 dir
+  bold(on) { return this.cmd(ESC, 0x45, on ? 1 : 0); }
+  size(n) { return this.cmd(GS, 0x21, n); }             // 0x00 normal, 0x11 2x
+  text(s) { this.parts.push(enc.encode(noAccent(s))); return this; }
+  line(s = '') { return this.text(s).feed(1); }
+  feed(n = 1) { for (let i = 0; i < n; i++) this.parts.push(new Uint8Array([LF])); return this; }
+  rule(ch = '-') { return this.line(ch.repeat(WIDTH)); }
+  cut() { return this.feed(3).cmd(GS, 0x56, 66, 0); }   // corte parcial
+  bytes() { const len = this.parts.reduce((s, p) => s + p.length, 0); const out = new Uint8Array(len); let o = 0; for (const p of this.parts) { out.set(p, o); o += p.length; } return out; }
+}
+
+const padNum = (n) => String(n ?? 0).padStart(3, '0');
+const money = (v) => 'R$ ' + (Number(v) || 0).toFixed(2).replace('.', ',');
+
+// Expande linhas do pedido em unidades (qtd 2 => 2 papeis)
+function explode(items) {
+  const units = [];
+  for (const it of items) for (let i = 0; i < (it.qtd || 1); i++) units.push(it);
+  return units;
+}
+
+// ---- Via do entregador (2 vias iguais) ----
+export function deliveryTicket(order, store) {
+  const t = new Ticket();
+  const totalItens = explode(order.items).length;
+  t.align(1).bold(true).size(0x11).line(noAccent(store?.nome || 'ACAI MAIS SABOR'));
+  t.size(0).line('VIA DO ENTREGADOR').bold(false);
+  t.size(0x11).bold(true).line('Pedido ' + padNum(order.daily_number)).size(0).bold(false);
+  t.align(0).rule();
+  t.bold(true).line(order.delivery_type === 'retirada' ? 'RETIRADA NA LOJA' : 'ENTREGA').bold(false);
+  t.line('Cliente: ' + order.customer_name);
+  t.line('Tel: ' + order.customer_phone);
+  if (order.delivery_type !== 'retirada' && order.address) {
+    wrap('End: ' + order.address).forEach((l) => t.line(l));
+  }
+  t.bold(true).line('Itens na sacola: ' + totalItens).bold(false);
+  t.rule();
+  const pg = { pix: 'PIX na entrega', cartao: 'Cartao na maquininha', dinheiro: 'Dinheiro' }[order.payment_method] || order.payment_method || '';
+  t.line('Pagamento: ' + pg);
+  if (order.payment_method === 'dinheiro' && order.change_for) {
+    const troco = parseFloat(String(order.change_for).replace(',', '.')) - Number(order.total);
+    t.line('Troco para: R$ ' + order.change_for + (isFinite(troco) ? '  (troco ' + money(troco) + ')' : ''));
+  }
+  t.line('Subtotal: ' + money(order.subtotal));
+  t.line((order.delivery_type === 'retirada' ? 'Retirada: ' : 'Taxa de entrega: ') + money(order.delivery_fee));
+  t.size(0x11).bold(true).line('TOTAL: ' + money(order.total)).size(0).bold(false);
+  t.rule();
+  t.align(1).line(new Date(order.created_at || Date.now()).toLocaleString('pt-BR'));
+  t.cut();
+  return t.bytes();
+}
+
+// ---- Vias de produção (1 papel por item) ----
+export function productionTickets(order) {
+  const units = explode(order.items);
+  const total = units.length;
+  const chunks = [];
+  units.forEach((it, idx) => {
+    const t = new Ticket();
+    t.align(1).size(0x11).bold(true).line('Pedido ' + padNum(order.daily_number)).size(0).bold(false);
+    t.line('Item ' + String(idx + 1).padStart(2, '0') + ' de ' + String(total).padStart(2, '0') + '  |  Itens no pedido: ' + total);
+    t.align(0).rule();
+    t.bold(true).size(0x11).line(it.nome).size(0).bold(false);
+    (it.detalhes || []).forEach((d) => t.line(noAccent(d)));
+    if (!it.detalhes || !it.detalhes.length) t.line('Puro, sem acompanhamento');
+    t.line(''.padEnd(WIDTH, '='));
+    t.cut();
+    chunks.push(t.bytes());
+  });
+  return chunks;
+}
+
+function wrap(s, width = WIDTH) {
+  const words = String(s).split(' '); const lines = []; let cur = '';
+  for (const w of words) { if ((cur + ' ' + w).trim().length > width) { lines.push(cur.trim()); cur = w; } else cur += ' ' + w; }
+  if (cur.trim()) lines.push(cur.trim());
+  return lines.length ? lines : [''];
+}
+
+// =============================================================================
+// Transporte Web Serial
+// =============================================================================
+let port = null;
+
+export const printer = {
+  supported() { return 'serial' in navigator; },
+  connected() { return !!port; },
+
+  async reconnect() {
+    if (!this.supported()) return false;
+    try {
+      const ports = await navigator.serial.getPorts();
+      if (ports.length) { port = ports[0]; if (!port.readable) await port.open({ baudRate: 9600 }); return true; }
+    } catch (e) { console.warn('reconnect', e); }
+    return false;
+  },
+
+  async connect() {
+    if (!this.supported()) throw new Error('Web Serial não suportado neste navegador. Use Chrome ou Edge no computador.');
+    port = await navigator.serial.requestPort();
+    await port.open({ baudRate: 9600 });
+    localStorage.setItem('ams_printer', '1');
+    return true;
+  },
+
+  async write(bytes) {
+    if (!port) { const ok = await this.reconnect(); if (!ok) throw new Error('Impressora não conectada'); }
+    if (!port.writable) await port.open({ baudRate: 9600 });
+    const writer = port.writable.getWriter();
+    try { await writer.write(bytes); } finally { writer.releaseLock(); }
+  },
+
+  // Imprime o pedido completo: 2 vias do entregador + N vias de produção
+  async printOrder(order, store) {
+    const jobs = [deliveryTicket(order, store), deliveryTicket(order, store), ...productionTickets(order)];
+    for (const j of jobs) { await this.write(j); await new Promise((r) => setTimeout(r, 250)); }
+    return jobs.length;
+  },
+
+  async test(store) {
+    const t = new Ticket();
+    t.align(1).bold(true).size(0x11).line(noAccent(store?.nome || 'ACAI MAIS SABOR')).size(0).bold(false);
+    t.line('Teste de impressao').rule().align(0)
+      .line('Se voce esta lendo isso,').line('a impressora esta OK!').cut();
+    await this.write(t.bytes());
+  },
+};

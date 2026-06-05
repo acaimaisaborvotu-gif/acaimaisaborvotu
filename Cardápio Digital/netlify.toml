@@ -1,0 +1,11 @@
+# Netlify — publica a pasta app/ (site estático, sem build)
+[build]
+  publish = "app"
+  command = ""
+
+# Cabeçalhos básicos
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
