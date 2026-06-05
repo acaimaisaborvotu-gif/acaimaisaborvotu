@@ -57,13 +57,6 @@ export const RECIPIENTES = [
       { id: 'tigela-1100', ml: 1100, preco: 34.0 },
     ],
   },
-  {
-    id: 'barca', nome: 'Barca',
-    tamanhos: [
-      { id: 'barca-1300', ml: 1300, preco: 41.0 },
-      { id: 'barca-1500', ml: 1500, preco: 48.0 },
-    ],
-  },
 ];
 
 // Bases do açaí: inclusas no preço, pode escolher mais de uma. Açaí é a padrão.
@@ -283,11 +276,14 @@ export const CATEGORIAS = [
   { id: 'combinados', nome: 'Combinados', tipo: 'combos' },
   { id: 'monte', nome: 'Monte Seu Açaí', tipo: 'monte' },
   { id: 'frapes', nome: 'Frapês', tipo: 'frape' },
-  { id: 'saladas', nome: 'Saladas de Frutas', tipo: 'simples' },
+  { id: 'saladas', nome: 'Salada de Frutas', tipo: 'simples' },
   { id: 'milkshakes', nome: 'Milk Shakes', tipo: 'milkshake' },
   { id: 'sobremesas', nome: 'Diversos', tipo: 'simples' },
-  { id: 'bebidas', nome: 'Bebidas', tipo: 'simples' },
+  { id: 'bebidas', nome: 'Águas & Refrigerantes', tipo: 'simples' },
 ];
+
+// Fotos dos tiles de Categorias (a loja sobe pelo painel). catId -> url
+export const CATEGORIA_FOTOS = {};
 
 // Fotos iniciais (placeholder do seed; a loja troca pelo painel depois)
 export const FOTOS_SEED = {

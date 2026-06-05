@@ -11,12 +11,15 @@ import { hmToMin } from './util.js';
 // Menu/configurações hidratados do Supabase (quando conectado). Senão, usa o seed.
 let MENU = null;
 let SETTINGS_HYDRATED = null;
+// Cache local: na 1a tela já mostra o último cardápio salvo (abre instantâneo)
+const CACHE_KEY = 'ams_cache_v1';
+try { const c = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null'); if (c) { MENU = c.menu || null; SETTINGS_HYDRATED = c.settings || null; } } catch (e) {}
 
 const SEED_MENU = () => ({
   RECIPIENTES: SEED.RECIPIENTES, BASES: SEED.BASES, ACOMPANHAMENTOS: SEED.ACOMPANHAMENTOS,
   COMBOS: SEED.COMBOS, DESTAQUES: SEED.DESTAQUES, FRAPE: SEED.FRAPE, MILKSHAKE: SEED.MILKSHAKE,
   SALADAS: SEED.SALADAS, SOBREMESAS: SEED.SOBREMESAS, BEBIDAS: SEED.BEBIDAS,
-  CATEGORIAS: SEED.CATEGORIAS, FOTOS_SEED: SEED.FOTOS_SEED, esgotados: [],
+  CATEGORIAS: SEED.CATEGORIAS, FOTOS_SEED: SEED.FOTOS_SEED, categoriaFotos: SEED.CATEGORIA_FOTOS, esgotados: [],
 });
 
 // Catálogo corrente (hidratado ou seed). Os modais leem daqui.
@@ -31,7 +34,8 @@ export async function hydrate() {
     const { data } = await client.from('store_config').select('menu, settings').eq('store_slug', CONFIG.STORE_ID).maybeSingle();
     if (data?.menu) MENU = data.menu;
     if (data?.settings) SETTINGS_HYDRATED = data.settings;
-  } catch (e) { console.warn('hydrate falhou, usando seed local', e); }
+    try { localStorage.setItem(CACHE_KEY, JSON.stringify({ menu: MENU, settings: SETTINGS_HYDRATED })); } catch (e) {}
+  } catch (e) { console.warn('hydrate falhou, usando cache/seed', e); }
 }
 
 // ---- Supabase (carregado sob demanda) ----
@@ -39,7 +43,7 @@ let _sb = null;
 export async function sb() {
   if (!hasSupabase()) return null;
   if (_sb) return _sb;
-  const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
+  const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
   _sb = createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
   return _sb;
 }
@@ -95,7 +99,11 @@ export function buildCatalog() {
   const src = menu();
   const out = soldOutSet();
   const fotos = src.FOTOS_SEED || {};
+  const catFotos = src.categoriaFotos || {};
   const combosById = Object.fromEntries((src.COMBOS || []).map((c) => [c.id, c]));
+  // Combinados: Ninho Trufado sempre primeiro (mais vendido)
+  const combosOrdenados = [...(src.COMBOS || [])].sort((a, b) =>
+    a.id === 'ninho-trufado' ? -1 : b.id === 'ninho-trufado' ? 1 : 0);
   const cats = [];
 
   for (const cat of (src.CATEGORIAS || SEED.CATEGORIAS)) {
@@ -106,7 +114,7 @@ export function buildCatalog() {
         foto: fotos[c.id] || null, precoFrom: comboFrom(c), raw: c,
       }));
     } else if (cat.id === 'combinados') {
-      items = (src.COMBOS || []).map((c) => ({
+      items = combosOrdenados.map((c) => ({
         id: c.id, nome: c.nome, desc: c.desc, tipo: 'combo', catId: cat.id,
         foto: fotos[c.id] || null, precoFrom: comboFrom(c), raw: c,
       }));
@@ -135,7 +143,7 @@ export function buildCatalog() {
         foto: fotos[s.id] || null, precoFrom: s.preco, raw: s }));
     }
     items.forEach((it) => { it.esgotado = out.has(it.id); it.emoji = EMOJI[cat.id] || '🍧'; });
-    cats.push({ ...cat, items });
+    cats.push({ ...cat, foto: catFotos[cat.id] || null, items });
   }
   return cats;
 }

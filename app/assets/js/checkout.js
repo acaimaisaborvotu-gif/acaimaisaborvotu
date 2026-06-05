@@ -22,7 +22,7 @@ export function openCheckout({ openOrders = 0 } = {}) {
 
   const state = {
     step: 1, nome: '', telefone: '',
-    tipo: 'entrega', endereco: '', referencia: '',
+    tipo: 'entrega', rua: '', numero: '', bairro: '', complemento: '', referencia: '', obs: '',
     metodo: settings.pagamentos[0], trocoPara: '',
   };
   const sub = cart.subtotal();
@@ -80,24 +80,39 @@ export function openCheckout({ openOrders = 0 } = {}) {
     });
     body.append(el('div', { class: 'sheet-title', text: 'Como prefere receber?' }), seg);
 
+    const inp = (key, ph) => {
+      const i = el('input', { style: inputStyle, placeholder: ph, value: state[key] });
+      i.addEventListener('input', () => state[key] = i.value);
+      return i;
+    };
+
     if (state.tipo === 'entrega') {
-      const end = el('textarea', { class: 'obs', placeholder: 'Rua, número, bairro, complemento', style: inputStyle }, state.endereco);
-      const ref = el('input', { style: inputStyle, placeholder: 'Ponto de referência (opcional)', value: state.referencia });
-      end.value = state.endereco;
-      end.addEventListener('input', () => state.endereco = end.value);
-      ref.addEventListener('input', () => state.referencia = ref.value);
-      const eta = tempoEntrega(openOrders, settings);
-      body.append(field('Endereço de entrega', end), field('Referência', ref),
-        el('div', { class: 'pill', style: 'margin-top:6px', html: `🕒 Entrega em aprox. <b>&nbsp;${eta.min} a ${eta.max} min</b>` }),
-        el('div', { class: 'pill', style: 'margin-left:8px', html: `🛵 Taxa <b>&nbsp;${money(settings.taxaEntrega)}</b>` }));
-    } else {
+      const ruaNum = el('div', { style: 'display:flex;gap:8px' }, [
+        el('div', { style: 'flex:3' }, inp('rua', 'Rua / Avenida')),
+        el('div', { style: 'flex:1.1' }, inp('numero', 'Número')),
+      ]);
       body.append(
-        el('div', { class: 'sheet-desc', style: 'margin-top:8px', text: `Retirar na loja: ${store.endereco}` }),
-        el('div', { class: 'pill', style: 'margin-top:8px', html: `🕒 Pronto em aprox. <b>&nbsp;${settings.retiradaMinutos} min</b>` }),
-        el('div', { class: 'pill', style: 'margin-left:8px', html: '🛵 Sem taxa de entrega' }));
+        field('Rua e número', ruaNum),
+        field('Bairro', inp('bairro', 'Seu bairro')),
+        field('Complemento', inp('complemento', 'Apto, bloco, casa (opcional)')),
+        field('Ponto de referência', inp('referencia', 'Perto de... (opcional)')),
+        el('div', { class: 'pill', style: 'margin-top:4px', html: '📍 Cidade <b>&nbsp;Votuporanga/SP</b>' }),
+        el('div', { class: 'muted', style: 'font-size:.8rem;margin-top:6px', text: 'Entregas somente para Votuporanga/SP.' }),
+      );
+    } else {
+      body.append(el('div', { class: 'sheet-desc', style: 'margin-top:8px', text: `Retirar na loja: ${store.endereco}` }));
     }
+
+    const ta = el('textarea', { class: 'obs', placeholder: 'Alguma observação pro pedido? (opcional)', maxlength: '200' });
+    ta.value = state.obs; ta.addEventListener('input', () => state.obs = ta.value);
+    body.append(field('Observação', ta));
+
     setFoot('Continuar', () => {
-      if (state.tipo === 'entrega' && state.endereco.trim().length < 6) return toast('Informe o endereço de entrega');
+      if (state.tipo === 'entrega') {
+        if (state.rua.trim().length < 3) return toast('Informe a rua');
+        if (!state.numero.trim()) return toast('Informe o número (ou S/N)');
+        if (state.bairro.trim().length < 2) return toast('Informe o bairro');
+      }
       state.step = 3; render();
     });
   }
@@ -147,12 +162,18 @@ export function openCheckout({ openOrders = 0 } = {}) {
     const btn = foot.querySelector('button.btn-primary');
     btn.disabled = true; btn.innerHTML = 'Enviando...';
     const eta = tempoEntrega(openOrders, settings);
+    const obsTxt = state.obs.trim();
+    let endereco = '';
+    if (state.tipo === 'entrega') {
+      endereco = `${state.rua.trim()}, ${state.numero.trim()}${state.complemento.trim() ? ' - ' + state.complemento.trim() : ''} - ${state.bairro.trim()} - Votuporanga/SP${state.referencia.trim() ? ' (Ref: ' + state.referencia.trim() + ')' : ''}`;
+    }
+    if (obsTxt) endereco += (endereco ? ' | ' : '') + 'Obs: ' + obsTxt;
     const order = {
       customer: { nome: state.nome.trim(), telefone: state.telefone.trim() },
       items: items.map((i) => ({ nome: i.print?.titulo || i.nome, detalhes: i.print?.detalhes || [], qtd: i.qtd, precoUnit: i.precoUnit, tipo: i.tipo, refId: i.refId, catId: i.catId })),
       totals: { subtotal: sub, taxa: taxa(), total: total() },
       payment: { metodo: state.metodo, trocoPara: state.metodo === 'dinheiro' ? state.trocoPara : '' },
-      delivery: { tipo: state.tipo, endereco: state.tipo === 'entrega' ? `${state.endereco}${state.referencia ? ' (ref: ' + state.referencia + ')' : ''}` : '', etaMin: state.tipo === 'entrega' ? eta.min : settings.retiradaMinutos, etaMax: state.tipo === 'entrega' ? eta.max : settings.retiradaMinutos },
+      delivery: { tipo: state.tipo, endereco, etaMin: state.tipo === 'entrega' ? eta.min : settings.retiradaMinutos, etaMax: state.tipo === 'entrega' ? eta.max : settings.retiradaMinutos },
     };
     order.whatsappText = buildWhatsApp(order, store);
     try {

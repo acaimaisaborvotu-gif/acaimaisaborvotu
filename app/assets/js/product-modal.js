@@ -42,14 +42,17 @@ function groupHead(title, sub, tag) {
   ]);
 }
 
-// Seletor recipiente (segmentado) + tamanhos (radio)
+// Seletor recipiente (segmentado) + tamanhos. NADA pré-selecionado: a pessoa escolhe.
 function sizePicker(recipientes, state, recompute) {
   const wrap = el('div');
-  const seg = el('div', { class: 'opt', style: 'gap:6px;padding:6px;border:none;background:var(--surface-2)' });
+  const single = recipientes.length === 1;
+  if (single) state.recipienteId = recipientes[0].id; // recipiente único é implícito (frapê, milk)
+  const seg = el('div', { class: 'seg-recip' });
   const sizesBox = el('div');
   function renderSizes() {
     sizesBox.innerHTML = '';
     const r = recipientes.find((x) => x.id === state.recipienteId);
+    if (!r) { sizesBox.append(el('div', { class: 'opt-hint', text: 'Primeiro escolha copo ou tigela' })); return; }
     r.tamanhos.forEach((t) => {
       const sel = state.tamanhoId === t.id;
       const row = el('button', { class: 'opt' + (sel ? ' sel' : ''), type: 'button' }, [
@@ -61,18 +64,19 @@ function sizePicker(recipientes, state, recompute) {
       sizesBox.append(row);
     });
   }
-  recipientes.forEach((r) => {
-    const b = el('button', { class: 'btn ' + (state.recipienteId === r.id ? 'btn-primary' : 'btn-ghost'), type: 'button', style: 'flex:1;padding:9px', text: r.nome });
-    b.addEventListener('click', () => {
-      state.recipienteId = r.id;
-      state.tamanhoId = r.tamanhos[0].id;
-      [...seg.children].forEach((c, i) => c.className = 'btn ' + (recipientes[i].id === state.recipienteId ? 'btn-primary' : 'btn-ghost'));
-      renderSizes(); recompute();
+  if (!single) {
+    recipientes.forEach((r) => {
+      const b = el('button', { class: 'btn btn-ghost', type: 'button', style: 'flex:1;padding:9px', text: r.nome });
+      b.addEventListener('click', () => {
+        state.recipienteId = r.id; state.tamanhoId = null;
+        [...seg.children].forEach((c, i) => c.className = 'btn ' + (recipientes[i].id === state.recipienteId ? 'btn-primary' : 'btn-ghost'));
+        renderSizes(); recompute();
+      });
+      seg.append(b);
     });
-    seg.append(b);
-  });
+  }
   renderSizes();
-  wrap.append(recipientes.length > 1 ? seg : el('div'), sizesBox);
+  wrap.append(single ? el('div') : seg, sizesBox);
   return wrap;
 }
 
@@ -106,7 +110,6 @@ export function openProduct(item, onAdd) {
   if (item.desc) body.append(el('div', { class: 'sheet-desc', text: item.desc }));
 
   if (item.tipo === 'monte') {
-    state.recipienteId = M.RECIPIENTES[0].id; state.tamanhoId = M.RECIPIENTES[0].tamanhos[0].id;
     M.BASES.filter((b) => b.padrao).forEach((b) => state.bases.add(b.id));
     const g1 = el('div', { class: 'opt-group' }); g1.append(groupHead('Tamanho', null, 'req'), sizePicker(M.RECIPIENTES, state, () => recompute()));
     body.append(g1);
@@ -124,7 +127,6 @@ export function openProduct(item, onAdd) {
     M.ACOMPANHAMENTOS.forEach((g) => body.append(acompGroup(g, state)));
   } else if (item.tipo === 'combo') {
     const recs = comboRecips();
-    state.recipienteId = recs[0].id; state.tamanhoId = recs[0].tamanhos[0].id;
     const g1 = el('div', { class: 'opt-group' }); g1.append(groupHead('Tamanho', 'Copo ou tigela', 'req'), sizePicker(recs, state, () => recompute()));
     body.append(g1);
     const extras = el('div', { class: 'opt-group' });
@@ -132,12 +134,10 @@ export function openProduct(item, onAdd) {
     body.append(extras);
     M.ACOMPANHAMENTOS.forEach((g) => body.append(acompGroup(g, state)));
   } else if (item.tipo === 'frape') {
-    state.recipienteId = 'frape'; state.tamanhoId = M.FRAPE.tamanhos[0].id;
     const g1 = el('div', { class: 'opt-group' }); g1.append(groupHead('Tamanho', null, 'req'), sizePicker([{ id: 'frape', nome: 'Frapê', tamanhos: M.FRAPE.tamanhos }], state, () => recompute()));
     body.append(g1);
     M.ACOMPANHAMENTOS.forEach((g) => body.append(acompGroup(g, state)));
   } else if (item.tipo === 'milkshake') {
-    state.tamanhoId = M.MILKSHAKE.tamanhos[0].id;
     const g1 = el('div', { class: 'opt-group' }); g1.append(groupHead('Tamanho', null, 'req'), sizePicker([{ id: 'milk', nome: 'Milk-shake', tamanhos: M.MILKSHAKE.tamanhos }], state, () => recompute()));
     body.append(g1);
     const gs = el('div', { class: 'opt-group' }); gs.append(groupHead('Sabor', null, 'req'));
@@ -194,12 +194,22 @@ export function openProduct(item, onAdd) {
     }
     return p;
   }
-  function valido() { return !(item.tipo === 'milkshake' && !state.sabor); }
+  function valido() {
+    if (item.tipo === 'simples') return true;
+    if (item.tipo === 'milkshake') return !!state.tamanhoId && !!state.sabor;
+    return !!state.tamanhoId;
+  }
+  function faltando() {
+    if (item.tipo === 'simples') return '';
+    if (!state.tamanhoId) return 'Escolha o tamanho';
+    if (item.tipo === 'milkshake' && !state.sabor) return 'Escolha o sabor';
+    return '';
+  }
   state._recompute = recompute;
   function recompute() {
     const unit = precoUnit(); const ok = valido();
     addBtn.disabled = !ok;
-    addBtn.innerHTML = ok ? `Adicionar &bull; ${money(unit * state.qtd)}` : 'Escolha o sabor';
+    addBtn.innerHTML = ok ? `Adicionar &bull; ${money(unit * state.qtd)}` : faltando();
   }
   recompute();
 

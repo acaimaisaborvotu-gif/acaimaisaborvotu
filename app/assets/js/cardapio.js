@@ -127,6 +127,24 @@ function featured(items) {
   return track;
 }
 
+const EMOJI_CAT = { combinados: '🍧', monte: '🍨', frapes: '🥤', saladas: '🥣', milkshakes: '🥤', sobremesas: '🍫', bebidas: '🧃' };
+function categoriasTiles() {
+  const cats = catalog.filter((c) => c.id !== 'destaques' && c.items.length);
+  const row = el('div', { class: 'cats-row' }, cats.map((c) => {
+    const img = c.foto
+      ? el('img', { class: 'ct-img', src: c.foto, alt: c.nome, loading: 'lazy', onerror: function () { this.replaceWith(el('div', { class: 'ct-img ph' }, el('span', { text: EMOJI_CAT[c.id] || '🍧' }))); } })
+      : el('div', { class: 'ct-img ph' }, el('span', { text: EMOJI_CAT[c.id] || '🍧' }));
+    const tile = el('button', { class: 'cat-tile' }, [img, el('span', { class: 'ct-name', text: c.nome })]);
+    tile.addEventListener('click', () => document.getElementById('sec-' + c.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    return tile;
+  }));
+  const arrow = el('button', { class: 'cats-arrow', 'aria-label': 'Mais categorias', html: '&#8250;' });
+  arrow.addEventListener('click', () => row.scrollBy({ left: 250, behavior: 'smooth' }));
+  const wrap = el('div', { class: 'cats-wrap' }, [row, arrow]);
+  requestAnimationFrame(() => { if (row.scrollWidth <= row.clientWidth + 8) arrow.style.display = 'none'; });
+  return el('section', { class: 'section' }, el('div', { class: 'container' }, [el('h2', { text: 'Categorias' }), wrap]));
+}
+
 let sectionsHost;
 function renderSections() {
   if (!sectionsHost) return;
@@ -155,6 +173,7 @@ function renderSections() {
     if (c.tipo === 'destaques') { sec.append(el('div', { class: 'container' }, el('h2', { text: c.nome })), featured(c.items)); }
     else sec.append(inner);
     sectionsHost.append(sec);
+    if (c.tipo === 'destaques') sectionsHost.append(categoriasTiles());
   });
   observeSections();
 }
@@ -257,13 +276,12 @@ function boot() {
   sectionsHost = main; root.append(main, cartBar());
   renderSections();
   updateCart();
+  document.getElementById('loading')?.remove();
 }
 
 cart.onChange(updateCart);
 
-(async () => {
-  await hydrate();                       // busca menu+settings do Supabase (se conectado)
-  settings = getSettings(); catalog = buildCatalog(); boot();
-  // Reflete mudanças do painel em tempo real
-  subscribe('store_config', async () => { await hydrate(); settings = getSettings(); catalog = buildCatalog(); boot(); }).catch(() => {});
-})();
+// Abre INSTANTÂNEO: mostra o cardápio do cache local (ou seed) na hora,
+// e atualiza por trás com o Supabase (sem segurar a tela nem manter conexão ao vivo).
+settings = getSettings(); catalog = buildCatalog(); boot();
+hydrate().then(() => { settings = getSettings(); catalog = buildCatalog(); boot(); }).catch(() => {});

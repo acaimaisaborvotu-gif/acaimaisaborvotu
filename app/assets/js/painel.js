@@ -169,7 +169,7 @@ function orderCard(o) {
     el('div', { class: 'obody' }, [
       el('div', { class: 'ocust', text: o.customer_name }),
       el('div', { class: 'oinfo', text: `${o.customer_phone} · ${o.delivery_type === 'retirada' ? 'Retirada' : 'Entrega'}` }),
-      o.delivery_type === 'entrega' && o.address ? el('div', { class: 'oinfo', text: '📍 ' + o.address }) : null,
+      o.address ? el('div', { class: 'oinfo', text: '📍 ' + o.address }) : null,
       el('div', { class: 'oitems' }, (o.items || []).map((it) => el('div', { class: 'it', html: `<b>${it.qtd}x ${escapeHtml(it.nome)}</b>${it.detalhes?.length ? `<small>${escapeHtml(it.detalhes.join(', '))}</small>` : ''}` }))),
       el('div', { style: 'display:flex;gap:8px;align-items:center;flex-wrap:wrap' }, [
         el('span', { class: 'tag-pay', text: ({ pix: 'PIX', cartao: 'Cartão', dinheiro: 'Dinheiro' }[o.payment_method] || o.payment_method || '') + (o.payment_method === 'dinheiro' && o.change_for ? ` (troco p/ R$ ${o.change_for})` : '') }),
@@ -231,7 +231,19 @@ function alertNew() {
 // ---------------------------------------------------------------- Cardápio (editor)
 function currentMenu() { return cfg.menu || seedMenu(); }
 function seedMenu() {
-  return { RECIPIENTES: SEED.RECIPIENTES, BASES: SEED.BASES, ACOMPANHAMENTOS: SEED.ACOMPANHAMENTOS, COMBOS: SEED.COMBOS, DESTAQUES: SEED.DESTAQUES, FRAPE: SEED.FRAPE, MILKSHAKE: SEED.MILKSHAKE, SALADAS: SEED.SALADAS, SOBREMESAS: SEED.SOBREMESAS, BEBIDAS: SEED.BEBIDAS, CATEGORIAS: SEED.CATEGORIAS, FOTOS_SEED: SEED.FOTOS_SEED, esgotados: [] };
+  return { RECIPIENTES: SEED.RECIPIENTES, BASES: SEED.BASES, ACOMPANHAMENTOS: SEED.ACOMPANHAMENTOS, COMBOS: SEED.COMBOS, DESTAQUES: SEED.DESTAQUES, FRAPE: SEED.FRAPE, MILKSHAKE: SEED.MILKSHAKE, SALADAS: SEED.SALADAS, SOBREMESAS: SEED.SOBREMESAS, BEBIDAS: SEED.BEBIDAS, CATEGORIAS: SEED.CATEGORIAS, FOTOS_SEED: { ...SEED.FOTOS_SEED }, categoriaFotos: { ...SEED.CATEGORIA_FOTOS }, esgotados: [] };
+}
+// Aplica a estrutura nova do código preservando o que a loja já editou (fotos, esgotados, destaques)
+function mergedSeed() {
+  const seed = seedMenu();
+  const old = cfg.menu;
+  if (old) {
+    seed.FOTOS_SEED = { ...seed.FOTOS_SEED, ...(old.FOTOS_SEED || {}) };
+    seed.categoriaFotos = { ...seed.categoriaFotos, ...(old.categoriaFotos || {}) };
+    seed.esgotados = old.esgotados || [];
+    if (old.DESTAQUES) seed.DESTAQUES = old.DESTAQUES;
+  }
+  return seed;
 }
 
 async function saveMenu(menu) {
@@ -254,6 +266,22 @@ function renderCardapio() {
     ]));
     return;
   }
+
+  // Atualizar estrutura nova (preserva fotos/esgotados/destaques)
+  host.append(el('div', { class: 'panel-card' }, [
+    el('h3', { text: 'Atualizar cardápio' }),
+    el('p', { class: 'hint', text: 'Aplica melhorias de estrutura do sistema (categorias, ajustes). Suas fotos, esgotados e destaques são mantidos.' }),
+    el('button', { class: 'btn btn-ghost', text: 'Atualizar para a versão mais nova', onclick: async (e) => { e.target.disabled = true; if (await saveMenu(mergedSeed())) renderCardapio(); else e.target.disabled = false; } }),
+  ]));
+
+  // Fotos das Categorias (tiles)
+  menu.categoriaFotos = menu.categoriaFotos || {};
+  const catCard = el('div', { class: 'panel-card' }, [el('h3', { text: 'Fotos das Categorias' }), el('p', { class: 'hint', text: 'Imagem do tile de cada categoria (seção Categorias). Aparece na hora pro cliente.' })]);
+  (menu.CATEGORIAS || []).filter((c) => c.id !== 'destaques').forEach((c) => {
+    catCard.append(menuRow({ id: c.id, nome: c.nome, foto: menu.categoriaFotos[c.id], price: null, noStar: true, onFoto: (url) => { menu.categoriaFotos[c.id] = url; } }));
+  });
+  catCard.append(saveBtn(menu));
+  host.append(catCard);
 
   // Destaques + esgotado + preço dos combos
   const combosCard = el('div', { class: 'panel-card' }, [el('h3', { text: 'Combinados' }), el('p', { class: 'hint', text: 'Estrela = destaque. Chave = esgotado some do cardápio. Valor = preço dos acompanhamentos (o tamanho soma por cima). Foto aparece na hora.' })]);
@@ -290,8 +318,8 @@ function renderCardapio() {
 }
 
 function menuRow({ id, nome, sub, price, foto, isDestaque, esgotado, onPrice, onStar, onEsg, onFoto, simple, noStar }) {
-  const priceInput = el('input', { class: 'price', type: 'number', step: '0.50', value: Number(price).toFixed(2) });
-  priceInput.addEventListener('input', () => onPrice(parseFloat(priceInput.value) || 0));
+  const priceInput = price == null ? null : el('input', { class: 'price', type: 'number', step: '0.50', value: Number(price).toFixed(2) });
+  if (priceInput) priceInput.addEventListener('input', () => onPrice(parseFloat(priceInput.value) || 0));
   const row = el('div', { class: 'menu-item' }, [
     !simple ? (foto ? el('img', { class: 'mi-thumb', src: foto }) : el('div', { class: 'mi-thumb', html: '<span>🍧</span>' })) : null,
     el('div', { class: 'mi-name' }, [nome, sub ? el('small', { text: sub }) : null]),
@@ -304,6 +332,20 @@ function menuRow({ id, nome, sub, price, foto, isDestaque, esgotado, onPrice, on
 }
 function starEl(on, cb) { const s = el('span', { class: 'star' + (on ? ' on' : ''), text: '★' }); s.addEventListener('click', () => { const nowOn = cb(); s.classList.toggle('on', nowOn); }); return s; }
 function esgSwitch(on, cb) { const inp = el('input', { type: 'checkbox' }); inp.checked = !on; const lbl = el('label', { class: 'switch', title: 'Disponível' }, [inp, el('span')]); inp.addEventListener('change', () => cb()); return lbl; }
+// Comprime/redimensiona no navegador antes de subir (sem perda visível, deixa o site leve)
+async function compressImage(file, maxDim = 1080, quality = 0.85) {
+  if (!file.type || !file.type.startsWith('image/')) return { blob: file, jpg: false };
+  try {
+    const bmp = await createImageBitmap(file);
+    let { width, height } = bmp;
+    if (Math.max(width, height) > maxDim) { const s = maxDim / Math.max(width, height); width = Math.round(width * s); height = Math.round(height * s); }
+    const c = document.createElement('canvas'); c.width = width; c.height = height;
+    c.getContext('2d').drawImage(bmp, 0, 0, width, height);
+    const blob = await new Promise((res) => c.toBlob(res, 'image/jpeg', quality));
+    return blob && blob.size < file.size ? { blob, jpg: true } : { blob: file, jpg: false };
+  } catch { return { blob: file, jpg: false }; }
+}
+
 function fotoBtn(cb) {
   const file = el('input', { type: 'file', accept: 'image/*', style: 'display:none' });
   const b = el('button', { class: 'btn btn-ghost mini', text: '📷' });
@@ -311,8 +353,11 @@ function fotoBtn(cb) {
   file.addEventListener('change', async () => {
     const f = file.files[0]; if (!f) return; b.textContent = '...';
     try {
-      const path = `${STORE_SLUG}/${Date.now()}-${f.name.replace(/[^\w.]/g, '')}`;
-      const { error } = await client.storage.from('fotos').upload(path, f, { upsert: true });
+      const { blob, jpg } = await compressImage(f);
+      const base = (f.name.replace(/\.[^.]+$/, '') || 'foto').replace(/[^\w]/g, '').slice(0, 30) || 'foto';
+      const ext = jpg ? 'jpg' : (f.name.split('.').pop() || 'jpg');
+      const path = `${STORE_SLUG}/${Date.now()}-${base}.${ext}`;
+      const { error } = await client.storage.from('fotos').upload(path, blob, { upsert: true, contentType: jpg ? 'image/jpeg' : f.type });
       if (error) throw error;
       const { data } = client.storage.from('fotos').getPublicUrl(path);
       cb(data.publicUrl); b.textContent = '✓';
