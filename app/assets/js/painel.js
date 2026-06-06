@@ -35,12 +35,21 @@ const STATUS_COLOR = { novo: 'var(--magenta)', aceito: 'var(--warn)', producao: 
 
 // ---------------------------------------------------------------- boot
 (async function boot() {
-  if (!hasSupabase()) return renderNoBackend();
-  client = await sb();
-  const { data } = await client.auth.getSession();
-  session = data.session;
-  if (!session) return renderLogin();
-  await loadAll();
+  try {
+    if (!hasSupabase()) return renderNoBackend();
+    client = await sb();
+    const { data } = await client.auth.getSession();
+    session = data.session;
+    if (!session) return renderLogin();
+    await loadAll();
+  } catch (e) {
+    console.error(e);
+    app.innerHTML = '';
+    app.append(
+      el('div', { class: 'notice', html: `<h3>Não consegui abrir o painel</h3><p>${escapeHtml(String(e.message || e))}</p>` }),
+      el('div', { style: 'text-align:center;margin-top:10px' }, el('button', { class: 'btn btn-ghost', text: 'Tentar de novo', onclick: () => location.reload() })),
+    );
+  }
 })();
 
 async function loadAll() {
@@ -52,7 +61,7 @@ async function loadAll() {
   const { data: conf } = await client.from('store_config').select('*').eq('store_slug', STORE_SLUG).maybeSingle();
   cfg = conf || cfg;
   await loadOrders();
-  printer.reconnect().catch(() => {});
+  if (printer.config().method === 'serial') printer.reconnectSerial().catch(() => {});
   renderApp();
   subscribeOrders();
 }
@@ -197,16 +206,15 @@ async function advance(o) {
 
 async function doPrint(o) {
   try {
-    if (!printer.supported()) return toast('Use o Chrome no computador pra imprimir');
     await printer.printOrder(o, store);
     await client.from('orders').update({ printed: true }).eq('id', o.id);
     o.printed = true; renderOrders();
     toast('Enviado pra impressora');
   } catch (e) {
     console.error(e);
-    if (String(e.message).includes('não conectada') || String(e.message).includes('conectada')) {
-      toast('Conecte a impressora na aba Impressora');
-    } else toast('Falha ao imprimir: ' + e.message);
+    const m = String(e.message || '');
+    if (/impressora|qz|conectad|escolha|carregar/i.test(m)) toast('Configure a impressora na aba Impressora');
+    else toast('Falha ao imprimir: ' + m);
   }
 }
 
@@ -418,19 +426,44 @@ function renderConfig() {
 // ---------------------------------------------------------------- Impressora
 function renderImpressora() {
   const host = document.getElementById('tabContent'); host.innerHTML = '';
-  const supported = printer.supported();
-  const statusEl = el('div', { class: 'pill', style: 'margin:6px 0' });
-  const refresh = () => { const c = printer.connected(); statusEl.className = 'pill ' + (c ? 'pill-ok' : 'pill-closed'); statusEl.innerHTML = `<span class="dot"></span> ${c ? 'Impressora conectada' : 'Impressora não conectada'}`; };
-  refresh();
-  const card = el('div', { class: 'panel-card' }, [
-    el('h3', { text: 'Impressora térmica' }),
-    el('p', { class: 'hint', html: supported ? 'Conecte a impressora USB e clique em conectar. O navegador vai mostrar a lista de dispositivos pra você escolher. A impressão sai sozinha quando você aceita um pedido.' : 'Este navegador não suporta impressão direta. Use o <b>Google Chrome</b> ou <b>Edge</b> no computador da loja.' }),
-    statusEl,
-    el('div', { style: 'display:flex;gap:10px;flex-wrap:wrap;margin-top:10px' }, [
-      el('button', { class: 'btn btn-primary', text: '🔌 Conectar impressora', disabled: !supported, onclick: async (e) => { try { await printer.connect(); refresh(); toast('Impressora conectada!'); } catch (err) { toast(err.message); } } }),
-      el('button', { class: 'btn btn-ghost', text: '🧾 Imprimir teste', disabled: !supported, onclick: async () => { try { await printer.test(store); toast('Teste enviado'); } catch (err) { toast(err.message || 'Conecte a impressora'); } } }),
+  const cfg = printer.config();
+  const status = el('div', { class: 'pill ' + (cfg.printer ? 'pill-ok' : 'pill-closed'), style: 'margin:8px 0' });
+  status.innerHTML = `<span class="dot"></span> ${cfg.printer ? 'Impressora: ' + cfg.printer : 'Nenhuma impressora configurada'}`;
+  const pickerBox = el('div', { style: 'margin-top:10px' });
+
+  host.append(el('div', { class: 'panel-card' }, [
+    el('h3', { text: 'Impressora térmica (EPSON TM-T20)' }),
+    el('p', { class: 'hint', html: 'Sua impressora está instalada no Windows como <b>CAIXA</b>. Pra imprimir por ela, usamos o <b>QZ Tray</b>, um programinha grátis que liga o navegador na impressora.' }),
+    status,
+    el('p', { class: 'hint', html: '<b>Passo 1:</b> instale o QZ Tray no PC da loja em <b>qz.io/download</b> e deixe aberto (ícone perto do relógio).' }),
+    el('p', { class: 'hint', html: '<b>Passo 2:</b> clique abaixo, libere quando o QZ Tray perguntar (marque "lembrar") e escolha a impressora <b>CAIXA</b>.' }),
+    el('div', { style: 'display:flex;gap:10px;flex-wrap:wrap;margin-top:6px' }, [
+      el('button', { class: 'btn btn-primary', text: '🖨 Conectar e listar impressoras', onclick: async (e) => {
+        e.target.disabled = true; const old = e.target.textContent; e.target.textContent = 'Conectando...';
+        try {
+          const printers = await printer.qzListPrinters();
+          pickerBox.innerHTML = '';
+          if (!printers || !printers.length) pickerBox.append(el('p', { class: 'hint', text: 'Nenhuma impressora encontrada no QZ Tray.' }));
+          else {
+            const sel = el('select', { style: 'border:1.5px solid var(--line);border-radius:10px;padding:10px;width:100%' },
+              printers.map((p) => el('option', { value: p, text: p, selected: p === cfg.printer || /caixa|tm-t20|epson/i.test(p) })));
+            const save = el('button', { class: 'btn btn-amarelo', style: 'margin-top:8px', text: 'Salvar impressora', onclick: () => { printer.setConfig('qz', sel.value); toast('Impressora salva: ' + sel.value); renderImpressora(); } });
+            pickerBox.append(el('div', { class: 'frow' }, [el('label', { text: 'Escolha a impressora' }), sel]), save);
+          }
+        } catch (err) { console.error(err); toast('QZ Tray não encontrado. Instale e deixe aberto.'); }
+        e.target.disabled = false; e.target.textContent = old;
+      } }),
+      el('button', { class: 'btn btn-ghost', text: '🧾 Imprimir teste', onclick: async () => { try { await printer.test(store); toast('Teste enviado'); } catch (err) { toast(err.message || 'Configure a impressora'); } } }),
     ]),
-    el('p', { class: 'hint', style: 'margin-top:14px', html: 'Modelo da impressora ainda não definido. Quando a loja tiver a impressora, é só conectar aqui. Detalhes e alternativa (QZ Tray) em <code>docs/GUIA-IMPRESSORA.md</code>.' }),
-  ]);
-  host.append(card);
+    pickerBox,
+    el('p', { class: 'hint', style: 'margin-top:14px', html: 'A impressão sai sozinha quando você aceita um pedido (2 vias do entregador + 1 papel por item). Guia completo em <code>docs/GUIA-IMPRESSORA.md</code>.' }),
+  ]));
+
+  if (printer.supportsSerial()) {
+    host.append(el('div', { class: 'panel-card' }, [
+      el('h3', { text: 'Alternativa: porta serial direta' }),
+      el('p', { class: 'hint', text: 'Use apenas se a impressora aparecer como porta serial. Não é o caso da EPSON instalada como CAIXA.' }),
+      el('button', { class: 'btn btn-ghost', text: 'Conectar via porta serial', onclick: async () => { try { await printer.connectSerial(); toast('Conectada via serial'); renderImpressora(); } catch (err) { toast(err.message); } } }),
+    ]));
+  }
 }

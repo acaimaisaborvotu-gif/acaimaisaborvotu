@@ -96,50 +96,94 @@ function wrap(s, width = WIDTH) {
 }
 
 // =============================================================================
-// Transporte Web Serial
+// Transporte: QZ Tray (impressora instalada no Windows, ex: EPSON TM-T20)
+// ou Web Serial (impressora em porta serial/USB direta) como alternativa.
 // =============================================================================
-let port = null;
+const PCFG_KEY = 'ams_printer_cfg';
+let pcfg = {};
+try { pcfg = JSON.parse(localStorage.getItem(PCFG_KEY) || '{}'); } catch (e) {}
+
+let port = null;   // web serial
+let _qz = null;    // window.qz
+
+function bytesToB64(bytes) {
+  let bin = ''; const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+  return btoa(bin);
+}
+
+async function loadQz() {
+  if (window.qz) return window.qz;
+  await new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/qz-tray@2.2.4/qz-tray.js';
+    s.onload = resolve;
+    s.onerror = () => reject(new Error('Não consegui carregar o QZ Tray (sem internet?)'));
+    document.head.appendChild(s);
+  });
+  return window.qz;
+}
+
+async function qzConnect() {
+  const qz = await loadQz();
+  // Modo sem assinatura: o QZ Tray pede pra você liberar uma vez (marque "lembrar").
+  qz.security.setCertificatePromise((resolve) => resolve());
+  qz.security.setSignaturePromise(() => (resolve) => resolve());
+  if (!qz.websocket.isActive()) await qz.websocket.connect();
+  _qz = qz;
+  return qz;
+}
 
 export const printer = {
-  supported() { return 'serial' in navigator; },
-  connected() { return !!port; },
+  supportsSerial() { return 'serial' in navigator; },
+  config() { return pcfg; },
+  setConfig(method, printerName) { pcfg = { method, printer: printerName }; localStorage.setItem(PCFG_KEY, JSON.stringify(pcfg)); },
 
-  async reconnect() {
-    if (!this.supported()) return false;
-    try {
-      const ports = await navigator.serial.getPorts();
-      if (ports.length) { port = ports[0]; if (!port.readable) await port.open({ baudRate: 9600 }); return true; }
-    } catch (e) { console.warn('reconnect', e); }
+  // ---- QZ Tray ----
+  async qzListPrinters() { const qz = await qzConnect(); return await qz.printers.find(); },
+  async qzPrint(jobs) {
+    const qz = _qz || await qzConnect();
+    if (!pcfg.printer) throw new Error('Escolha a impressora primeiro');
+    const config = qz.configs.create(pcfg.printer);
+    const data = jobs.map((b) => ({ type: 'raw', format: 'base64', data: bytesToB64(b) }));
+    await qz.print(config, data);
+  },
+
+  // ---- Web Serial ----
+  connected() { return !!port; },
+  async reconnectSerial() {
+    if (!this.supportsSerial()) return false;
+    try { const ports = await navigator.serial.getPorts(); if (ports.length) { port = ports[0]; if (!port.readable) await port.open({ baudRate: 9600 }); return true; } } catch (e) {}
     return false;
   },
-
-  async connect() {
-    if (!this.supported()) throw new Error('Web Serial não suportado neste navegador. Use Chrome ou Edge no computador.');
+  async connectSerial() {
+    if (!this.supportsSerial()) throw new Error('Web Serial não suportado. Use o QZ Tray.');
     port = await navigator.serial.requestPort();
     await port.open({ baudRate: 9600 });
-    localStorage.setItem('ams_printer', '1');
+    this.setConfig('serial', 'Serial (USB)');
     return true;
   },
-
-  async write(bytes) {
-    if (!port) { const ok = await this.reconnect(); if (!ok) throw new Error('Impressora não conectada'); }
+  async writeSerial(bytes) {
+    if (!port) { const ok = await this.reconnectSerial(); if (!ok) throw new Error('Impressora serial não conectada'); }
     if (!port.writable) await port.open({ baudRate: 9600 });
     const writer = port.writable.getWriter();
     try { await writer.write(bytes); } finally { writer.releaseLock(); }
   },
 
-  // Imprime o pedido completo: 2 vias do entregador + N vias de produção
+  // ---- Comum ----
+  // Imprime o pedido: 2 vias do entregador + N vias de produção (1 por item)
   async printOrder(order, store) {
     const jobs = [deliveryTicket(order, store), deliveryTicket(order, store), ...productionTickets(order)];
-    for (const j of jobs) { await this.write(j); await new Promise((r) => setTimeout(r, 250)); }
+    if (pcfg.method === 'serial') { for (const j of jobs) { await this.writeSerial(j); await new Promise((r) => setTimeout(r, 250)); } }
+    else { await this.qzPrint(jobs); }
     return jobs.length;
   },
-
   async test(store) {
     const t = new Ticket();
     t.align(1).bold(true).size(0x11).line(noAccent(store?.nome || 'ACAI MAIS SABOR')).size(0).bold(false);
     t.line('Teste de impressao').rule().align(0)
       .line('Se voce esta lendo isso,').line('a impressora esta OK!').cut();
-    await this.write(t.bytes());
+    if (pcfg.method === 'serial') await this.writeSerial(t.bytes());
+    else await this.qzPrint([t.bytes()]);
   },
 };
