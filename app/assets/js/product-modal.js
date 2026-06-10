@@ -1,6 +1,6 @@
 // =============================================================================
 // MODAL DE PRODUTO — montagem com preço dinâmico
-// Tipos: monte | combo | frape | milkshake | simples
+// Tipos: monte | combo | frape | milkshake | sorvete (petit/brownie) | simples
 // Lê o cardápio corrente (hidratado do painel/Supabase ou seed) via menu().
 // =============================================================================
 
@@ -10,6 +10,13 @@ import { menu } from './data.js';
 let M;                                   // catálogo corrente (setado ao abrir)
 const comboRecips = () => M.RECIPIENTES.filter((r) => r.id === 'copo' || r.id === 'tigela');
 const acompName = (id) => { for (const g of M.ACOMPANHAMENTOS) { const f = g.itens.find((i) => i.id === id); if (f) return f; } return null; };
+
+// Ordem dos grupos de acompanhamento (mais vendidos primeiro)
+const ACOMP_ORDER = ['frutas', 'cremes', 'mousses', 'chocolates', 'sorvetes', 'coberturas', 'diversos'];
+const acompGroupsOrdered = () => [...M.ACOMPANHAMENTOS].sort((a, b) => {
+  const ia = ACOMP_ORDER.indexOf(a.id), ib = ACOMP_ORDER.indexOf(b.id);
+  return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+});
 
 function overlayShell(item) {
   const overlay = el('div', { class: 'overlay' });
@@ -38,6 +45,7 @@ function groupHead(title, sub, tag) {
   return el('div', { class: 'opt-head' }, [
     el('div', { class: 't' }, [title, sub ? el('small', { text: sub }) : null]),
     tag === 'req' ? el('span', { class: 'opt-req', text: 'Escolha 1' })
+      : tag === 'req+' ? el('span', { class: 'opt-req', text: 'Pelo menos 1' })
       : tag === 'opt' ? el('span', { class: 'opt-opt', text: 'Opcional' }) : null,
   ]);
 }
@@ -46,7 +54,7 @@ function groupHead(title, sub, tag) {
 function sizePicker(recipientes, state, recompute) {
   const wrap = el('div');
   const single = recipientes.length === 1;
-  if (single) state.recipienteId = recipientes[0].id; // recipiente único é implícito (frapê, milk)
+  if (single) state.recipienteId = recipientes[0].id;
   const seg = el('div', { class: 'seg-recip' });
   const sizesBox = el('div');
   function renderSizes() {
@@ -104,7 +112,7 @@ function acompGroup(group, state) {
 export function openProduct(item, onAdd) {
   M = menu();
   const { body, foot, destroy } = overlayShell(item);
-  const state = { recipienteId: null, tamanhoId: null, bases: new Set(), acomp: new Map(), sabor: null, sabor2: null, obs: '', qtd: 1 };
+  const state = { recipienteId: null, tamanhoId: null, bases: new Set(), acomp: new Map(), sabores: new Set(), sorvete: null, obs: '', qtd: 1 };
 
   body.append(el('div', { class: 'sheet-title', text: item.tipo === 'combo' ? `Combinado ${item.nome}` : item.nome }));
   if (item.desc) body.append(el('div', { class: 'sheet-desc', text: item.desc }));
@@ -113,18 +121,19 @@ export function openProduct(item, onAdd) {
     M.BASES.filter((b) => b.padrao).forEach((b) => state.bases.add(b.id));
     const g1 = el('div', { class: 'opt-group' }); g1.append(groupHead('Tamanho', null, 'req'), sizePicker(M.RECIPIENTES, state, () => recompute()));
     body.append(g1);
-    const gb = el('div', { class: 'opt-group' }); gb.append(groupHead('Base', 'Pode escolher mais de uma. Açaí já vem marcado.', 'opt'));
+    const gb = el('div', { class: 'opt-group' }); gb.append(groupHead('Base', 'Açaí já vem marcado. Pode escolher mais de uma.', 'req+'));
     M.BASES.forEach((b) => {
+      const mark = el('span', { class: 'mark sq', html: state.bases.has(b.id) ? '&#10003;' : '' });
       const row = el('div', { class: 'opt' + (state.bases.has(b.id) ? ' sel' : '') }, [
         el('span', { class: 'oname', text: b.nome }),
         el('span', { class: 'oprice free', text: 'Grátis' }),
-        el('span', { class: 'mark sq', html: state.bases.has(b.id) ? '&#10003;' : '' }),
+        mark,
       ]);
-      row.addEventListener('click', () => { state.bases.has(b.id) ? state.bases.delete(b.id) : state.bases.add(b.id); row.classList.toggle('sel'); row.querySelector('.mark').innerHTML = state.bases.has(b.id) ? '&#10003;' : ''; });
+      row.addEventListener('click', () => { state.bases.has(b.id) ? state.bases.delete(b.id) : state.bases.add(b.id); row.classList.toggle('sel', state.bases.has(b.id)); mark.innerHTML = state.bases.has(b.id) ? '&#10003;' : ''; recompute(); });
       gb.append(row);
     });
     body.append(gb);
-    M.ACOMPANHAMENTOS.forEach((g) => body.append(acompGroup(g, state)));
+    acompGroupsOrdered().forEach((g) => body.append(acompGroup(g, state)));
   } else if (item.tipo === 'combo') {
     const recs = comboRecips();
     const g1 = el('div', { class: 'opt-group' }); g1.append(groupHead('Tamanho', 'Copo ou tigela', 'req'), sizePicker(recs, state, () => recompute()));
@@ -132,36 +141,42 @@ export function openProduct(item, onAdd) {
     const extras = el('div', { class: 'opt-group' });
     extras.append(groupHead('Turbine com acompanhamentos', 'Opcional, soma ao preço', 'opt'));
     body.append(extras);
-    M.ACOMPANHAMENTOS.forEach((g) => body.append(acompGroup(g, state)));
+    acompGroupsOrdered().forEach((g) => body.append(acompGroup(g, state)));
   } else if (item.tipo === 'frape') {
     const g1 = el('div', { class: 'opt-group' }); g1.append(groupHead('Tamanho', null, 'req'), sizePicker([{ id: 'frape', nome: 'Frapê', tamanhos: M.FRAPE.tamanhos }], state, () => recompute()));
     body.append(g1);
-    M.ACOMPANHAMENTOS.forEach((g) => body.append(acompGroup(g, state)));
+    acompGroupsOrdered().forEach((g) => body.append(acompGroup(g, state)));
   } else if (item.tipo === 'milkshake') {
     const g1 = el('div', { class: 'opt-group' }); g1.append(groupHead('Tamanho', null, 'req'), sizePicker([{ id: 'milk', nome: 'Milk-shake', tamanhos: M.MILKSHAKE.tamanhos }], state, () => recompute()));
     body.append(g1);
-    const gs = el('div', { class: 'opt-group' }); gs.append(groupHead('Sabor', null, 'req'));
+    const gs = el('div', { class: 'opt-group' });
+    gs.append(groupHead('Sabores', `1º incluso. Cada sabor a mais: + ${money(M.MILKSHAKE.precoSaborExtra)}`, 'req+'));
     M.MILKSHAKE.sabores.forEach((s) => {
-      const row = el('button', { class: 'opt', type: 'button' }, [el('span', { class: 'oname', text: s.nome }), el('span', { class: 'mark', html: '' })]);
-      row.addEventListener('click', () => { state.sabor = s.id; [...gs.querySelectorAll('.opt')].forEach((r) => { r.classList.remove('sel'); r.querySelector('.mark').innerHTML = ''; }); row.classList.add('sel'); row.querySelector('.mark').innerHTML = '&#10003;'; recompute(); });
+      const mark = el('span', { class: 'mark sq', html: '' });
+      const row = el('div', { class: 'opt' }, [el('span', { class: 'oname', text: s.nome }), mark]);
+      row.addEventListener('click', () => {
+        state.sabores.has(s.id) ? state.sabores.delete(s.id) : state.sabores.add(s.id);
+        const on = state.sabores.has(s.id); row.classList.toggle('sel', on); mark.innerHTML = on ? '&#10003;' : '';
+        recompute();
+      });
       gs.append(row);
     });
     body.append(gs);
-    const g2 = el('div', { class: 'opt-group' });
-    const toggle = el('div', { class: 'opt' }, [el('span', { class: 'oname', text: 'Adicionar 2º sabor' }), el('span', { class: 'oprice', text: '+ ' + money(M.MILKSHAKE.precoSaborExtra) }), el('span', { class: 'mark sq', html: '' })]);
-    const sel2 = el('div', { class: 'hidden' });
-    M.MILKSHAKE.sabores.forEach((s) => {
-      const row = el('button', { class: 'opt', type: 'button' }, [el('span', { class: 'oname', text: s.nome }), el('span', { class: 'mark', html: '' })]);
-      row.addEventListener('click', () => { state.sabor2 = s.id; [...sel2.querySelectorAll('.opt')].forEach((r) => { r.classList.remove('sel'); r.querySelector('.mark').innerHTML = ''; }); row.classList.add('sel'); row.querySelector('.mark').innerHTML = '&#10003;'; recompute(); });
-      sel2.append(row);
+  } else if (item.tipo === 'sorvete') {
+    // Petit Gateau / Brownie: 1 sorvete incluso + acompanhamentos opcionais
+    const sorveteGroup = M.ACOMPANHAMENTOS.find((g) => g.id === 'sorvetes');
+    const gs = el('div', { class: 'opt-group' }); gs.append(groupHead('Sorvete', 'Já vem no preço, escolha o seu', 'req'));
+    (sorveteGroup?.itens || []).forEach((s) => {
+      const mark = el('span', { class: 'mark', html: '' });
+      const row = el('button', { class: 'opt', type: 'button' }, [el('span', { class: 'oname', text: s.nome }), el('span', { class: 'oprice free', text: 'Incluso' }), mark]);
+      row.addEventListener('click', () => { state.sorvete = s.id; [...gs.querySelectorAll('.opt')].forEach((r) => { r.classList.remove('sel'); r.querySelector('.mark').innerHTML = ''; }); row.classList.add('sel'); mark.innerHTML = '&#10003;'; recompute(); });
+      gs.append(row);
     });
-    toggle.addEventListener('click', () => {
-      const on = sel2.classList.toggle('hidden') === false;
-      toggle.classList.toggle('sel', on); toggle.querySelector('.mark').innerHTML = on ? '&#10003;' : '';
-      if (!on) { state.sabor2 = null; sel2.querySelectorAll('.opt').forEach((r) => { r.classList.remove('sel'); r.querySelector('.mark').innerHTML = ''; }); }
-      recompute();
-    });
-    g2.append(toggle, sel2); body.append(g2);
+    body.append(gs);
+    const extras = el('div', { class: 'opt-group' });
+    extras.append(groupHead('Turbine com acompanhamentos', 'Opcional, soma ao preço', 'opt'));
+    body.append(extras);
+    acompGroupsOrdered().filter((g) => g.id !== 'sorvetes').forEach((g) => body.append(acompGroup(g, state)));
   }
 
   const gobs = el('div', { class: 'opt-group' });
@@ -178,6 +193,8 @@ export function openProduct(item, onAdd) {
   qplus.addEventListener('click', () => { state.qtd += 1; qn.textContent = state.qtd; qminus.disabled = false; recompute(); });
   foot.append(el('div', { class: 'stepper' }, [qminus, qn, qplus]), addBtn);
 
+  const acompSum = () => { let p = 0; for (const [id, q] of state.acomp) { const a = acompName(id); if (a) p += a.preco * q; } return p; };
+
   function precoUnit() {
     let p = 0;
     if (item.tipo === 'simples') return item.raw.preco;
@@ -186,23 +203,27 @@ export function openProduct(item, onAdd) {
       const recs = item.tipo === 'combo' ? comboRecips() : item.tipo === 'frape' ? [{ tamanhos: M.FRAPE.tamanhos }] : M.RECIPIENTES;
       const t = recs.flatMap((r) => r.tamanhos).find((x) => x.id === state.tamanhoId);
       if (t) p += t.preco;
-      for (const [id, q] of state.acomp) { const a = acompName(id); if (a) p += a.preco * q; }
+      p += acompSum();
     }
     if (item.tipo === 'milkshake') {
       const t = M.MILKSHAKE.tamanhos.find((x) => x.id === state.tamanhoId); if (t) p += t.preco;
-      if (state.sabor2) p += M.MILKSHAKE.precoSaborExtra;
+      p += Math.max(0, state.sabores.size - 1) * M.MILKSHAKE.precoSaborExtra;
     }
+    if (item.tipo === 'sorvete') { p += item.raw.preco; p += acompSum(); }
     return p;
   }
   function valido() {
     if (item.tipo === 'simples') return true;
-    if (item.tipo === 'milkshake') return !!state.tamanhoId && !!state.sabor;
+    if (item.tipo === 'monte') return !!state.tamanhoId && state.bases.size >= 1;
+    if (item.tipo === 'milkshake') return !!state.tamanhoId && state.sabores.size >= 1;
+    if (item.tipo === 'sorvete') return !!state.sorvete;
     return !!state.tamanhoId;
   }
   function faltando() {
-    if (item.tipo === 'simples') return '';
-    if (!state.tamanhoId) return 'Escolha o tamanho';
-    if (item.tipo === 'milkshake' && !state.sabor) return 'Escolha o sabor';
+    if (item.tipo === 'sorvete') return !state.sorvete ? 'Escolha o sorvete' : '';
+    if (!state.tamanhoId && item.tipo !== 'sorvete') return 'Escolha o tamanho';
+    if (item.tipo === 'monte' && state.bases.size < 1) return 'Escolha pelo menos 1 base';
+    if (item.tipo === 'milkshake' && state.sabores.size < 1) return 'Escolha pelo menos 1 sabor';
     return '';
   }
   state._recompute = recompute;
@@ -244,10 +265,13 @@ function buildLine(item, state, unit) {
     detalhes = acompList.length ? acompList : ['Puro'];
   } else if (item.tipo === 'milkshake') {
     const t = M.MILKSHAKE.tamanhos.find((x) => x.id === state.tamanhoId);
-    const s1 = M.MILKSHAKE.sabores.find((s) => s.id === state.sabor);
-    const s2 = M.MILKSHAKE.sabores.find((s) => s.id === state.sabor2);
-    titulo = `Milk-shake ${s1 ? s1.nome : ''} ${t.ml}ml`;
-    if (s2) detalhes.push(`2º sabor: ${s2.nome}`);
+    const nomes = M.MILKSHAKE.sabores.filter((s) => state.sabores.has(s.id)).map((s) => s.nome);
+    titulo = `Milk-shake ${t.ml}ml`;
+    detalhes = [nomes.join(' + ')];
+  } else if (item.tipo === 'sorvete') {
+    const sv = (M.ACOMPANHAMENTOS.find((g) => g.id === 'sorvetes')?.itens || []).find((s) => s.id === state.sorvete);
+    titulo = item.nome;
+    detalhes = [`Sorvete: ${sv ? sv.nome : ''}`, ...acompList];
   }
   if (state.obs) detalhes.push(`Obs: ${state.obs}`);
 

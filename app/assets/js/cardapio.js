@@ -4,7 +4,7 @@
 
 import { el, money, toast } from './util.js';
 import * as cart from './cart.js';
-import { getStore, getSettings, isOpenNow, nextOpenLabel, tempoEntrega, buildCatalog, subscribe, hydrate } from './data.js';
+import { getStore, getSettings, isOpenNow, nextOpenLabel, buildCatalog, hydrate, openOrdersCount, secao2, upsellItems } from './data.js';
 import { openProduct } from './product-modal.js';
 import { openCheckout } from './checkout.js';
 import { track } from './tracking.js';
@@ -53,9 +53,15 @@ function closedBanner() {
   return el('div', { class: 'closed-banner', html: `Estamos fechados. Você pode montar o pedido, abrimos <b>${nextOpenLabel(settings) || 'em breve'}</b>.` });
 }
 
+let searchTimer;
 function searchBar() {
   const input = el('input', { placeholder: 'Buscar no cardápio...', 'aria-label': 'Buscar' });
-  input.addEventListener('input', () => { query = input.value.trim().toLowerCase(); renderSections(); });
+  input.addEventListener('input', () => {
+    query = input.value.trim().toLowerCase();
+    renderSections();
+    clearTimeout(searchTimer);
+    if (query.length >= 3) searchTimer = setTimeout(() => track.search(query), 1200);
+  });
   return el('div', { class: 'search-wrap' }, el('div', { class: 'container' }, el('div', { class: 'search' }, [el('span', { html: ICON.search }), input])));
 }
 
@@ -96,7 +102,9 @@ function card(item) {
 
 function monteCard(item) {
   const c = el('div', { class: 'card', style: 'background:var(--grad-acai);color:#fff;border:none' }, [
-    el('div', { class: 'thumb ph', style: 'background:rgba(255,255,255,.15)' }, el('span', { text: '🍨' })),
+    item.foto
+      ? el('img', { class: 'thumb', src: item.foto, alt: item.nome, loading: 'lazy', onerror: function () { this.replaceWith(el('div', { class: 'thumb ph', style: 'background:rgba(255,255,255,.15)' }, el('span', { text: '🍨' }))); } })
+      : el('div', { class: 'thumb ph', style: 'background:rgba(255,255,255,.15)' }, el('span', { text: '🍨' })),
     el('div', { class: 'body' }, [
       el('h3', { style: 'color:#fff', text: item.nome }),
       el('p', { style: 'color:rgba(255,255,255,.85)', text: item.desc }),
@@ -117,7 +125,9 @@ function featured(items) {
       thumb(item, true),
       el('div', { class: 'fbody' }, [
         el('h3', { text: item.nome }),
-        el('div', { class: 'from', text: 'a partir de' }),
+        item.precoDe
+          ? el('div', { class: 'from', html: `de <s>${money(item.precoDe)}</s> por` })
+          : el('div', { class: 'from', text: item.tipo === 'simples' ? '' : 'a partir de' }),
         el('div', { class: 'val', text: money(item.precoFrom) }),
       ]),
     ]);
@@ -143,6 +153,15 @@ function categoriasTiles() {
   const wrap = el('div', { class: 'cats-wrap' }, [row, arrow]);
   requestAnimationFrame(() => { if (row.scrollWidth <= row.clientWidth + 8) arrow.style.display = 'none'; });
   return el('section', { class: 'section' }, el('div', { class: 'container' }, [el('h2', { text: 'Categorias' }), wrap]));
+}
+
+// Seção 2 personalizável (ex: Promoção), abaixo do TOP 5
+function secao2Section() {
+  const s = secao2();
+  if (!s) return null;
+  const sec = el('section', { class: 'section' });
+  sec.append(el('div', { class: 'container' }, el('h2', { text: s.titulo })), featured(s.items));
+  return sec;
 }
 
 let sectionsHost;
@@ -173,7 +192,11 @@ function renderSections() {
     if (c.tipo === 'destaques') { sec.append(el('div', { class: 'container' }, el('h2', { text: c.nome })), featured(c.items)); }
     else sec.append(inner);
     sectionsHost.append(sec);
-    if (c.tipo === 'destaques') sectionsHost.append(categoriasTiles());
+    if (c.tipo === 'destaques') {
+      const s2 = secao2Section();
+      if (s2) sectionsHost.append(s2);
+      sectionsHost.append(categoriasTiles());
+    }
   });
   observeSections();
 }
@@ -218,9 +241,34 @@ function openCart() {
         el('div', { class: 'stepper' }, [minus, nEl, plus]),
       ]));
     });
+    // Upsell (oferta antes de enviar) — configurável no painel
+    const up = upsellItems();
+    if (up && up.itens.length) {
+      const upBox = el('div', { class: 'opt-group', style: 'margin-top:14px' });
+      upBox.append(el('div', { class: 'opt-head' }, el('div', { class: 't', text: up.titulo })));
+      up.itens.forEach((u) => {
+        const add = el('button', { class: 'btn btn-amarelo mini', style: 'flex:0 0 auto', text: '+ ' + money(u.preco) });
+        add.addEventListener('click', () => {
+          const line = cart.add({ tipo: 'upsell', refId: u.refId || u.id, catId: 'upsell', nome: u.nome, precoUnit: Number(u.preco) || 0, qtd: 1, print: { titulo: u.nome, detalhes: [] } });
+          track.addToCart(line);
+          paint();
+        });
+        upBox.append(el('div', { class: 'opt' }, [
+          u.foto ? el('img', { src: u.foto, alt: u.nome, style: 'width:46px;height:46px;border-radius:10px;object-fit:cover;flex:none' }) : null,
+          el('span', { class: 'oname', text: u.nome }), add,
+        ]));
+      });
+      body.append(upBox);
+    }
     foot.append(
       el('div', { style: 'flex:1' }, [el('small', { class: 'muted', text: 'Subtotal' }), el('div', { style: 'font-weight:900;font-size:1.1rem', text: money(cart.subtotal()) })]),
-      el('button', { class: 'btn btn-primary', style: 'flex:1.4', text: 'Ir para o pagamento', onclick: () => { destroy(); openCheckout({}); } }),
+      el('button', { class: 'btn btn-primary', style: 'flex:1.4', text: 'Ir para o pagamento', onclick: async (e) => {
+        const min = settings.pedidoMinimo || 0;
+        if (min > 0 && cart.subtotal() < min) { toast(`Pedido mínimo de ${money(min)}. Faltam ${money(min - cart.subtotal())}.`); return; }
+        e.target.disabled = true;
+        const oo = await openOrdersCount();
+        destroy(); openCheckout({ openOrders: oo });
+      } }),
     );
   }
   paint();
@@ -284,4 +332,12 @@ cart.onChange(updateCart);
 // Abre INSTANTÂNEO: mostra o cardápio do cache local (ou seed) na hora,
 // e atualiza por trás com o Supabase (sem segurar a tela nem manter conexão ao vivo).
 settings = getSettings(); catalog = buildCatalog(); boot();
-hydrate().then(() => { settings = getSettings(); catalog = buildCatalog(); boot(); }).catch(() => {});
+// assinatura inclui catálogo + promo + upsell + settings: re-renderiza se QUALQUER um mudou
+const fullSig = () => JSON.stringify({ c: catalog, s2: secao2(), up: upsellItems(), st: settings });
+let lastSig = fullSig();
+hydrate().then(() => {
+  settings = getSettings();
+  catalog = buildCatalog();
+  const sig = fullSig();
+  if (sig !== lastSig) { const y = window.scrollY; boot(); window.scrollTo(0, y); lastSig = sig; }
+}).catch(() => {});

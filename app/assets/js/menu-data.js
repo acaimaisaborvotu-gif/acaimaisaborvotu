@@ -254,11 +254,10 @@ export const SALADAS = [
 
 // Diversos / Sobremesas (preço único)
 export const SOBREMESAS = [
-  { id: 'cascao', nome: 'Cascão', preco: 8.0 },
   { id: 'chocolate-quente', nome: 'Chocolate Quente', preco: 13.0 },
   { id: 'fondue', nome: 'Fondue', preco: 14.0 },
-  { id: 'petit-gateau', nome: 'Petit Gateau', preco: 23.0 },
-  { id: 'brownie', nome: 'Brownie', preco: 23.0 },
+  { id: 'petit-gateau', nome: 'Petit Gateau', desc: 'Escolha o sorvete (incluso) e turbine com acompanhamentos', preco: 23.0, sorvete: true },
+  { id: 'brownie', nome: 'Brownie', desc: 'Escolha o sorvete (incluso) e turbine com acompanhamentos', preco: 23.0, sorvete: true },
 ];
 
 // Bebidas (preço único)
@@ -272,7 +271,7 @@ export const BEBIDAS = [
 
 // Ordem e rótulos das categorias do cardápio público
 export const CATEGORIAS = [
-  { id: 'destaques', nome: 'Destaques', tipo: 'destaques' },
+  { id: 'destaques', nome: 'TOP 5', tipo: 'destaques' },
   { id: 'combinados', nome: 'Combinados', tipo: 'combos' },
   { id: 'monte', nome: 'Monte Seu Açaí', tipo: 'monte' },
   { id: 'frapes', nome: 'Frapês', tipo: 'frape' },
@@ -284,6 +283,16 @@ export const CATEGORIAS = [
 
 // Fotos dos tiles de Categorias (a loja sobe pelo painel). catId -> url
 export const CATEGORIA_FOTOS = {};
+
+// Seção 2 personalizável abaixo do TOP 5 (ex: "Promoção"). A loja edita no painel.
+// itens: { tipo:'ref', refId }                                  -> produto do cardápio
+//        { tipo:'custom', id, nome, desc, preco, precoDe, foto } -> oferta personalizada
+//        (precoDe opcional: mostra "de R$X por R$Y" riscado)
+export const SECAO2 = { titulo: 'Promoção da semana', ativa: false, itens: [] };
+
+// Upsell na sacola (antes de enviar). A loja edita no painel.
+// itens: [{ id, nome, preco, refId? }] - refId quando veio do cardápio.
+export const UPSELL = { ativo: false, titulo: 'Que tal adicionar?', itens: [] };
 
 // Fotos iniciais (placeholder do seed; a loja troca pelo painel depois)
 export const FOTOS_SEED = {

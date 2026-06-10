@@ -5,7 +5,7 @@
 
 import { el, money, toast } from './util.js';
 import * as cart from './cart.js';
-import { getStore, getSettings, isOpenNow, tempoEntrega, submitOrder } from './data.js';
+import { getStore, getSettings, isOpenNow, tempoEntrega, submitOrder, openOrdersCount } from './data.js';
 import { track } from './tracking.js';
 
 const PAGAMENTOS = {
@@ -14,15 +14,21 @@ const PAGAMENTOS = {
   dinheiro: { nome: 'Dinheiro', emoji: '💵' },
 };
 
-export function openCheckout({ openOrders = 0 } = {}) {
+export function openCheckout({ openOrders: ooInicial = 0 } = {}) {
   const settings = getSettings();
   const store = getStore();
   const items = cart.getItems();
   if (!items.length) { toast('Sua sacola está vazia'); return; }
 
+  // Pedidos abertos (tempo dinâmico): busca por trás, sem segurar a abertura do checkout.
+  let openOrders = ooInicial;
+  openOrdersCount().then((n) => { openOrders = n; }).catch(() => {});
+
+  let saved = {}; try { saved = JSON.parse(localStorage.getItem('ams_cliente') || '{}'); } catch (e) {}
   const state = {
-    step: 1, nome: '', telefone: '',
-    tipo: 'entrega', rua: '', numero: '', bairro: '', complemento: '', referencia: '', obs: '',
+    step: 1, nome: saved.nome || '', telefone: saved.telefone || '',
+    tipo: 'entrega', rua: saved.rua || '', numero: saved.numero || '', bairro: saved.bairro || '',
+    complemento: saved.complemento || '', referencia: saved.referencia || '', obs: '',
     metodo: settings.pagamentos[0], trocoPara: '',
   };
   const sub = cart.subtotal();
@@ -151,11 +157,15 @@ export function openCheckout({ openOrders = 0 } = {}) {
     body.append(resumo);
 
     const aberto = isOpenNow(settings);
-    setFoot(aberto ? `Enviar pedido • ${money(total())}` : 'Loja fechada', async () => {
+    const min = settings.pedidoMinimo || 0;
+    const abaixoMin = min > 0 && sub < min;
+    const label = !aberto ? 'Loja fechada' : abaixoMin ? `Pedido mínimo ${money(min)}` : `Enviar pedido • ${money(total())}`;
+    setFoot(label, async () => {
       if (!aberto) return toast('Estamos fechados no momento');
+      if (abaixoMin) return toast(`Pedido mínimo de ${money(min)}`);
       track.addPaymentInfo(items, total(), state.metodo);
       await finalize();
-    }, !aberto);
+    }, !aberto || abaixoMin);
   }
 
   async function finalize() {
@@ -176,6 +186,8 @@ export function openCheckout({ openOrders = 0 } = {}) {
       delivery: { tipo: state.tipo, endereco, etaMin: state.tipo === 'entrega' ? eta.min : settings.retiradaMinutos, etaMax: state.tipo === 'entrega' ? eta.max : settings.retiradaMinutos },
     };
     order.whatsappText = buildWhatsApp(order, store);
+    // salva os dados do cliente no aparelho pra próxima vez
+    try { localStorage.setItem('ams_cliente', JSON.stringify({ nome: state.nome.trim(), telefone: state.telefone.trim(), rua: state.rua.trim(), numero: state.numero.trim(), bairro: state.bairro.trim(), complemento: state.complemento.trim(), referencia: state.referencia.trim() })); } catch (e) {}
     try {
       const res = await submitOrder(order);
       order.id = res.id; order.numero = res.numero;

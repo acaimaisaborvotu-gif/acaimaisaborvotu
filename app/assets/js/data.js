@@ -20,6 +20,7 @@ const SEED_MENU = () => ({
   COMBOS: SEED.COMBOS, DESTAQUES: SEED.DESTAQUES, FRAPE: SEED.FRAPE, MILKSHAKE: SEED.MILKSHAKE,
   SALADAS: SEED.SALADAS, SOBREMESAS: SEED.SOBREMESAS, BEBIDAS: SEED.BEBIDAS,
   CATEGORIAS: SEED.CATEGORIAS, FOTOS_SEED: SEED.FOTOS_SEED, categoriaFotos: SEED.CATEGORIA_FOTOS, esgotados: [],
+  secao2: SEED.SECAO2, upsell: SEED.UPSELL,
 });
 
 // Catálogo corrente (hidratado ou seed). Os modais leem daqui.
@@ -76,6 +77,16 @@ export function nextOpenLabel(settings = getSettings(), now = new Date()) {
   return null;
 }
 
+// ---- Pedidos abertos (para o tempo dinâmico) ----
+export async function openOrdersCount() {
+  if (!hasSupabase()) return 0;
+  try {
+    const client = await sb();
+    const { data } = await client.rpc('open_orders_count', { p_store: CONFIG.STORE_ID });
+    return Number(data) || 0;
+  } catch (e) { return 0; }
+}
+
 // ---- Tempo de entrega dinâmico ----
 export function tempoEntrega(openOrders = 0, settings = getSettings()) {
   const extras = Math.floor(openOrders / Math.max(1, settings.tempoIncrementoCadaPedidos)) * settings.tempoIncrementoMin;
@@ -122,7 +133,7 @@ export function buildCatalog() {
       items = [{
         id: 'monte', nome: 'Monte Seu Açaí', tipo: 'monte', catId: cat.id,
         desc: 'Escolha o recipiente, o tamanho, a base e os acompanhamentos do seu jeito',
-        foto: null, precoFrom: recipMin(), raw: null,
+        foto: fotos.monte || null, precoFrom: recipMin(), raw: null,
       }];
     } else if (cat.id === 'frapes') {
       const f = src.FRAPE;
@@ -136,7 +147,7 @@ export function buildCatalog() {
       items = (src.SALADAS || []).map((s) => ({ id: s.id, nome: s.nome, desc: s.desc, tipo: 'simples', catId: cat.id,
         foto: fotos[s.id] || fotos['salada-verao'] || null, precoFrom: s.preco, raw: s }));
     } else if (cat.id === 'sobremesas') {
-      items = (src.SOBREMESAS || []).map((s) => ({ id: s.id, nome: s.nome, desc: s.desc || '', tipo: 'simples', catId: cat.id,
+      items = (src.SOBREMESAS || []).map((s) => ({ id: s.id, nome: s.nome, desc: s.desc || '', tipo: s.sorvete ? 'sorvete' : 'simples', catId: cat.id,
         foto: fotos[s.id] || null, precoFrom: s.preco, raw: s }));
     } else if (cat.id === 'bebidas') {
       items = (src.BEBIDAS || []).map((s) => ({ id: s.id, nome: s.nome, desc: s.desc || '', tipo: 'simples', catId: cat.id,
@@ -146,6 +157,39 @@ export function buildCatalog() {
     cats.push({ ...cat, foto: catFotos[cat.id] || null, items });
   }
   return cats;
+}
+
+// Seção 2 personalizável (ex: Promoção): produtos do cardápio + ofertas personalizadas
+export function secao2() {
+  const s = menu().secao2;
+  if (!s || !s.ativa) return null;
+  const itens = s.itens || [];
+  if (!itens.length) return null;
+  const index = {};
+  buildCatalog().forEach((c) => c.items.forEach((it) => { if (!index[it.id]) index[it.id] = it; }));
+  const items = [];
+  for (const it of itens) {
+    if (it.tipo === 'custom') {
+      if (!(it.nome || '').trim()) continue;
+      items.push({
+        id: it.id, nome: it.nome, desc: it.desc || '', tipo: 'simples', catId: 'promo',
+        foto: it.foto || null, emoji: '🔥', precoFrom: Number(it.preco) || 0,
+        precoDe: it.precoDe ? Number(it.precoDe) : null, raw: { preco: Number(it.preco) || 0 },
+      });
+    } else if (index[it.refId]) {
+      items.push(index[it.refId]);
+    }
+  }
+  return items.length ? { titulo: s.titulo || 'Promoção', items } : null;
+}
+
+// Upsell da sacola (ofertas que a loja configura). Ignora linhas sem nome.
+export function upsellItems() {
+  const u = menu().upsell;
+  if (!u || !u.ativo) return null;
+  const itens = (u.itens || []).filter((i) => (i.nome || '').trim() && Number(i.preco) >= 0);
+  if (!itens.length) return null;
+  return { titulo: u.titulo || 'Que tal adicionar?', itens };
 }
 
 // ---- Envio de pedido ----

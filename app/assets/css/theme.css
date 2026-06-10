@@ -135,12 +135,12 @@ a { color: inherit; text-decoration: none; }
 }
 
 /* ---- Hero ---- */
-.hero { background: linear-gradient(180deg, #fcf6f0 0%, #f5ebf2 100%); color: var(--roxo-800); padding: 22px 0 26px; text-align: center; }
-.hero .inner { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-.hero-logo { width: min(300px, 70%); height: auto; filter: drop-shadow(0 6px 16px rgba(74, 16, 82, .18)); }
-.hero-h1 { font-size: 1.34rem; font-weight: 900; color: var(--roxo-800); margin-top: 10px; line-height: 1.22; }
-.hero-sub { font-size: .93rem; color: var(--roxo-700); opacity: .9; max-width: 520px; margin: 6px auto 0; }
-.hero-status { margin-top: 13px; }
+.hero { background: linear-gradient(180deg, #fcf6f0 0%, #f5ebf2 100%); color: var(--roxo-800); padding: 14px 0 16px; text-align: center; }
+.hero .inner { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.hero-logo { width: min(190px, 46%); height: auto; filter: drop-shadow(0 5px 13px rgba(74, 16, 82, .18)); }
+.hero-h1 { font-size: 1.18rem; font-weight: 900; color: var(--roxo-800); margin-top: 7px; line-height: 1.2; }
+.hero-sub { font-size: .86rem; color: var(--roxo-700); opacity: .9; max-width: 520px; margin: 4px auto 0; }
+.hero-status { margin-top: 9px; }
 
 /* ---- Busca ---- */
 .search-wrap { position: sticky; top: var(--header-h); z-index: 30; background: var(--bg); padding-top: 12px; }
@@ -163,7 +163,7 @@ a { color: inherit; text-decoration: none; }
 .cat-nav button.active { background: var(--roxo-800); color: #fff; border-color: var(--roxo-800); }
 
 /* ---- Seções e cards ---- */
-.section { padding: 8px 0 6px; }
+.section { padding: 8px 0 6px; scroll-margin-top: 180px; }
 .section h2 {
   font-size: 1.2rem; font-weight: 900; color: var(--ink); margin: 14px 0 10px;
   display: flex; align-items: center; gap: 8px;
@@ -319,12 +319,12 @@ textarea.obs:focus { border-color: var(--magenta); }
 .cats-wrap { position: relative; }
 .cats-row { display: flex; gap: 12px; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none; padding-bottom: 2px; }
 .cats-row::-webkit-scrollbar { display: none; }
-.cat-tile { flex: 0 0 auto; width: 116px; scroll-snap-align: start; display: flex; flex-direction: column; align-items: center; gap: 7px; background: none; cursor: pointer; }
-.cat-tile .ct-img { width: 116px; height: 116px; border-radius: var(--r-md); object-fit: cover; background: var(--grad-acai); box-shadow: var(--sh-1); display: grid; place-items: center; transition: box-shadow .2s, transform .1s; }
-.cat-tile .ct-img.ph span { font-size: 2.4rem; filter: drop-shadow(0 2px 5px rgba(0, 0, 0, .3)); }
-.cat-tile .ct-name { font-size: .84rem; font-weight: 800; color: var(--ink); text-align: center; line-height: 1.15; }
+.cat-tile { flex: 0 0 auto; width: 170px; scroll-snap-align: start; display: flex; flex-direction: column; align-items: center; gap: 7px; background: none; cursor: pointer; }
+.cat-tile .ct-img { width: 170px; height: 128px; border-radius: var(--r-md); object-fit: cover; background: var(--grad-acai); box-shadow: var(--sh-1); display: grid; place-items: center; transition: box-shadow .2s, transform .1s; }
+.cat-tile .ct-img.ph span { font-size: 2.8rem; filter: drop-shadow(0 2px 5px rgba(0, 0, 0, .3)); }
+.cat-tile .ct-name { font-size: .88rem; font-weight: 800; color: var(--ink); text-align: center; line-height: 1.15; }
 .cat-tile:hover .ct-img { box-shadow: var(--sh-2); transform: translateY(-2px); }
-.cats-arrow { position: absolute; right: 2px; top: 58px; transform: translateY(-50%); width: 40px; height: 40px; border-radius: 50%; background: #fff; box-shadow: var(--sh-2); display: grid; place-items: center; font-size: 1.7rem; font-weight: 700; color: var(--magenta); z-index: 2; }
+.cats-arrow { position: absolute; right: 2px; top: 64px; transform: translateY(-50%); width: 40px; height: 40px; border-radius: 50%; background: #fff; box-shadow: var(--sh-2); display: grid; place-items: center; font-size: 1.7rem; font-weight: 700; color: var(--magenta); z-index: 2; }
 .cats-arrow:hover { background: var(--surface-2); }
 
 /* ---- Seletor de recipiente (modal) ---- */

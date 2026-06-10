@@ -11,6 +11,20 @@
   <meta property="og:type" content="website" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍧</text></svg>" />
 
+  <!-- Acelera a primeira visita: conecta cedo e baixa os módulos em paralelo -->
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+  <link rel="preconnect" href="https://favfyeyyzopsoigvyyim.supabase.co" crossorigin />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="modulepreload" href="assets/js/cardapio.js" />
+  <link rel="modulepreload" href="assets/js/data.js" />
+  <link rel="modulepreload" href="assets/js/menu-data.js" />
+  <link rel="modulepreload" href="assets/js/config.js" />
+  <link rel="modulepreload" href="assets/js/util.js" />
+  <link rel="modulepreload" href="assets/js/cart.js" />
+  <link rel="modulepreload" href="assets/js/tracking.js" />
+  <link rel="modulepreload" href="assets/js/product-modal.js" />
+  <link rel="modulepreload" href="assets/js/checkout.js" />
+
   <!-- Google Tag Manager -->
   <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
   new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
@@ -37,7 +51,7 @@
   <script type="module">
     import './assets/js/cardapio.js';
     addEventListener('load', () => document.getElementById('loading')?.remove());
-    setTimeout(() => document.getElementById('loading')?.remove(), 1500);
+    setTimeout(() => document.getElementById('loading')?.remove(), 900);
   </script>
 </body>
 </html>

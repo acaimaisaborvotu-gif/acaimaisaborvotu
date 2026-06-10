@@ -64,6 +64,8 @@ async function loadAll() {
   if (printer.config().method === 'serial') printer.reconnectSerial().catch(() => {});
   renderApp();
   subscribeOrders();
+  startAutoRefresh();
+  document.addEventListener('click', unlockAudio, { once: true });
 }
 
 async function loadOrders() {
@@ -84,6 +86,35 @@ function subscribeOrders() {
       const i = orders.findIndex((o) => o.id === p.new.id); if (i >= 0) orders[i] = p.new; renderOrders();
     })
     .subscribe();
+}
+
+// Rede de segurança: se a conexão ao vivo cair (internet oscilou, PC dormiu),
+// recarrega os pedidos ao focar a aba e a cada 1 min, e reassina se preciso.
+let autoRefreshOn = false;
+function startAutoRefresh() {
+  if (autoRefreshOn) return; autoRefreshOn = true;
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') safeRefresh(); });
+  window.addEventListener('focus', safeRefresh);
+  setInterval(safeRefresh, 60000);
+}
+async function safeRefresh() {
+  if (document.visibilityState !== 'visible' || !session) return;
+  try {
+    const before = new Set(orders.map((o) => o.id));
+    await loadOrders();
+    if (!channel || channel.state !== 'joined') subscribeOrders();
+    const temNovo = orders.some((o) => o.status === 'novo' && !before.has(o.id));
+    renderOrders();
+    if (temNovo) alertNew();
+  } catch (e) {}
+}
+
+// Garante que o som toca (libera o áudio numa interação do usuário)
+function unlockAudio() {
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  } catch (e) {}
 }
 
 // ---------------------------------------------------------------- views
@@ -117,7 +148,7 @@ function renderLogin() {
     e.preventDefault(); btn.disabled = true; btn.textContent = 'Entrando...';
     const { data, error } = await client.auth.signInWithPassword({ email: email.value.trim(), password: pass.value });
     if (error) { toast('E-mail ou senha inválidos'); btn.disabled = false; btn.textContent = 'Entrar'; return; }
-    session = data.session; await loadAll();
+    session = data.session; unlockAudio(); await loadAll();
   });
   app.append(el('div', { class: 'login-wrap' }, form));
 }
@@ -222,6 +253,7 @@ let audioCtx;
 function alertNew() {
   try {
     audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
     [0, 0.3, 0.6].forEach((delay) => {
       const o = audioCtx.createOscillator(), g = audioCtx.createGain();
       o.connect(g); g.connect(audioCtx.destination);
@@ -239,9 +271,10 @@ function alertNew() {
 // ---------------------------------------------------------------- Cardápio (editor)
 function currentMenu() { return cfg.menu || seedMenu(); }
 function seedMenu() {
-  return { RECIPIENTES: SEED.RECIPIENTES, BASES: SEED.BASES, ACOMPANHAMENTOS: SEED.ACOMPANHAMENTOS, COMBOS: SEED.COMBOS, DESTAQUES: SEED.DESTAQUES, FRAPE: SEED.FRAPE, MILKSHAKE: SEED.MILKSHAKE, SALADAS: SEED.SALADAS, SOBREMESAS: SEED.SOBREMESAS, BEBIDAS: SEED.BEBIDAS, CATEGORIAS: SEED.CATEGORIAS, FOTOS_SEED: { ...SEED.FOTOS_SEED }, categoriaFotos: { ...SEED.CATEGORIA_FOTOS }, esgotados: [] };
+  return { RECIPIENTES: SEED.RECIPIENTES, BASES: SEED.BASES, ACOMPANHAMENTOS: SEED.ACOMPANHAMENTOS, COMBOS: SEED.COMBOS, DESTAQUES: SEED.DESTAQUES, FRAPE: SEED.FRAPE, MILKSHAKE: SEED.MILKSHAKE, SALADAS: SEED.SALADAS, SOBREMESAS: SEED.SOBREMESAS, BEBIDAS: SEED.BEBIDAS, CATEGORIAS: SEED.CATEGORIAS, FOTOS_SEED: { ...SEED.FOTOS_SEED }, categoriaFotos: { ...SEED.CATEGORIA_FOTOS }, esgotados: [], secao2: { ...SEED.SECAO2, itens: [] }, upsell: { ...SEED.UPSELL, itens: [] } };
 }
-// Aplica a estrutura nova do código preservando o que a loja já editou (fotos, esgotados, destaques)
+// Aplica a estrutura nova do código preservando o que a loja já editou
+// (fotos, esgotados, destaques, seções E PREÇOS alterados no painel)
 function mergedSeed() {
   const seed = seedMenu();
   const old = cfg.menu;
@@ -250,8 +283,39 @@ function mergedSeed() {
     seed.categoriaFotos = { ...seed.categoriaFotos, ...(old.categoriaFotos || {}) };
     seed.esgotados = old.esgotados || [];
     if (old.DESTAQUES) seed.DESTAQUES = old.DESTAQUES;
+    if (old.secao2) seed.secao2 = old.secao2;
+    if (old.upsell) seed.upsell = old.upsell;
+    // preserva preços editados (casa por id; itens removidos do seed somem naturalmente)
+    const priceMap = {};
+    (old.RECIPIENTES || []).forEach((r) => (r.tamanhos || []).forEach((t) => priceMap[t.id] = t.preco));
+    (old.FRAPE?.tamanhos || []).forEach((t) => priceMap[t.id] = t.preco);
+    (old.MILKSHAKE?.tamanhos || []).forEach((t) => priceMap[t.id] = t.preco);
+    (old.ACOMPANHAMENTOS || []).forEach((g) => (g.itens || []).forEach((i) => priceMap[i.id] = i.preco));
+    [...(old.SALADAS || []), ...(old.SOBREMESAS || []), ...(old.BEBIDAS || [])].forEach((p) => priceMap[p.id] = p.preco);
+    const comboBase = {}; (old.COMBOS || []).forEach((c) => comboBase[c.id] = c.valorBase);
+    seed.RECIPIENTES.forEach((r) => r.tamanhos.forEach((t) => { if (priceMap[t.id] != null) t.preco = priceMap[t.id]; }));
+    seed.FRAPE.tamanhos.forEach((t) => { if (priceMap[t.id] != null) t.preco = priceMap[t.id]; });
+    seed.MILKSHAKE.tamanhos.forEach((t) => { if (priceMap[t.id] != null) t.preco = priceMap[t.id]; });
+    if (old.MILKSHAKE?.precoSaborExtra != null) seed.MILKSHAKE.precoSaborExtra = old.MILKSHAKE.precoSaborExtra;
+    seed.ACOMPANHAMENTOS.forEach((g) => g.itens.forEach((i) => { if (priceMap[i.id] != null) i.preco = priceMap[i.id]; }));
+    [...seed.SALADAS, ...seed.SOBREMESAS, ...seed.BEBIDAS].forEach((p) => { if (priceMap[p.id] != null) p.preco = priceMap[p.id]; });
+    seed.COMBOS.forEach((c) => { if (comboBase[c.id] != null) c.valorBase = comboBase[c.id]; });
   }
   return seed;
+}
+// Lista de produtos selecionáveis (com preço "a partir de", pro auto-preencher)
+function allProductsList(menu) {
+  const out = [];
+  const minTam = (tamanhos) => Math.min(...(tamanhos || []).map((t) => t.preco));
+  const comboMin = minTam((menu.RECIPIENTES || []).flatMap((r) => (r.id === 'copo' || r.id === 'tigela') ? r.tamanhos : []));
+  (menu.COMBOS || []).forEach((c) => out.push({ id: c.id, nome: 'Combinado ' + c.nome, preco: c.valorBase + comboMin }));
+  out.push({ id: 'monte', nome: 'Monte Seu Açaí', preco: minTam((menu.RECIPIENTES || []).flatMap((r) => r.tamanhos)) });
+  out.push({ id: 'frape', nome: 'Frapê', preco: minTam(menu.FRAPE?.tamanhos) });
+  out.push({ id: 'milkshake', nome: 'Milk Shake', preco: minTam(menu.MILKSHAKE?.tamanhos) });
+  (menu.SALADAS || []).forEach((s) => out.push({ id: s.id, nome: s.nome, preco: s.preco }));
+  (menu.SOBREMESAS || []).forEach((s) => out.push({ id: s.id, nome: s.nome, preco: s.preco }));
+  (menu.BEBIDAS || []).forEach((s) => out.push({ id: s.id, nome: s.nome, preco: s.preco }));
+  return out;
 }
 
 async function saveMenu(menu) {
@@ -291,8 +355,98 @@ function renderCardapio() {
   catCard.append(saveBtn(menu));
   host.append(catCard);
 
+  // Fotos: Monte, Frapê, Milk Shake
+  menu.FOTOS_SEED = menu.FOTOS_SEED || {};
+  const espCard = el('div', { class: 'panel-card' }, [el('h3', { text: 'Fotos: Monte, Frapê, Milk Shake' }), el('p', { class: 'hint', text: 'Foto desses produtos especiais (salada e diversos têm foto nas seções abaixo).' })]);
+  [['monte', 'Monte Seu Açaí'], ['frape', 'Frapê'], ['milkshake', 'Milk Shake']].forEach(([key, nome]) => {
+    espCard.append(menuRow({ id: key, nome, foto: menu.FOTOS_SEED[key], price: null, noStar: true, onFoto: (url) => { menu.FOTOS_SEED[key] = url; } }));
+  });
+  espCard.append(saveBtn(menu));
+  host.append(espCard);
+
+  // Seção extra (Promoção) abaixo do TOP 5 — lista compacta + seletor
+  menu.secao2 = menu.secao2 || { titulo: 'Promoção da semana', ativa: false, itens: [] };
+  const s2 = menu.secao2;
+  if (!s2.itens) s2.itens = (s2.ids || []).map((id) => ({ tipo: 'ref', refId: id })); // formato antigo
+  const produtos = allProductsList(menu);
+  const nomeProduto = (id) => produtos.find((p) => p.id === id)?.nome || id;
+  const prodSelect = (selId) => el('select', { style: 'border:1.5px solid var(--line);border-radius:10px;padding:9px;flex:1;min-width:0' },
+    [el('option', { value: '', text: 'Escolha um produto do cardápio...' }), ...produtos.map((p) => el('option', { value: p.id, text: `${p.nome} (${money(p.preco)})`, selected: p.id === selId }))]);
+
+  const s2card = el('div', { class: 'panel-card' }, [el('h3', { text: 'Seção extra (abaixo do TOP 5)' }), el('p', { class: 'hint', text: 'Ex: Promoção, Baratos da semana. Adicione produtos do cardápio ou crie uma oferta personalizada com preço promocional.' })]);
+  const s2ativa = el('input', { type: 'checkbox' }); s2ativa.checked = !!s2.ativa; s2ativa.addEventListener('change', () => s2.ativa = s2ativa.checked);
+  const s2tit = el('input', { type: 'text', value: s2.titulo || '', style: 'width:100%;text-align:left' }); s2tit.addEventListener('input', () => s2.titulo = s2tit.value);
+  s2card.append(el('div', { class: 'frow' }, [el('label', { text: 'Mostrar a seção' }), el('label', { class: 'switch' }, [s2ativa, el('span')])]));
+  s2card.append(el('div', { class: 'frow' }, [el('label', { text: 'Título' }), s2tit]));
+
+  const s2box = el('div');
+  const renderS2 = () => {
+    s2box.innerHTML = '';
+    if (!s2.itens.length) s2box.append(el('p', { class: 'hint', text: 'Nenhum item ainda. Adicione abaixo.' }));
+    s2.itens.forEach((it, idx) => {
+      const rm = el('button', { class: 'btn btn-ghost mini', text: '✕', onclick: () => { s2.itens.splice(idx, 1); renderS2(); } });
+      if (it.tipo === 'custom') {
+        const nome = el('input', { type: 'text', value: it.nome || '', placeholder: 'Nome da oferta (ex: Copo 500ml Morango + Ninho)', style: 'flex:1;text-align:left' }); nome.addEventListener('input', () => it.nome = nome.value);
+        const desc = el('input', { type: 'text', value: it.desc || '', placeholder: 'O que vem (descrição curta)', style: 'width:100%;text-align:left' }); desc.addEventListener('input', () => it.desc = desc.value);
+        const de = el('input', { type: 'number', step: '0.50', value: it.precoDe != null ? Number(it.precoDe).toFixed(2) : '', placeholder: 'De (opc.)', style: 'width:100px;text-align:right' }); de.addEventListener('input', () => it.precoDe = de.value === '' ? null : (parseFloat(de.value) || 0));
+        const por = el('input', { type: 'number', step: '0.50', value: Number(it.preco || 0).toFixed(2), style: 'width:100px;text-align:right' }); por.addEventListener('input', () => it.preco = parseFloat(por.value) || 0);
+        s2box.append(el('div', { style: 'border:1.5px solid var(--line);border-radius:12px;padding:10px;margin:8px 0' }, [
+          el('div', { style: 'display:flex;gap:8px;align-items:center' }, [el('span', { class: 'pill', text: '🔥 Oferta' }), nome, fotoBtn((url) => { it.foto = url; }), rm]),
+          el('div', { style: 'margin-top:8px' }, desc),
+          el('div', { style: 'display:flex;gap:8px;align-items:center;margin-top:8px' }, [el('label', { style: 'font-size:.82rem;font-weight:700', text: 'De R$' }), de, el('label', { style: 'font-size:.82rem;font-weight:700', text: 'Por R$' }), por]),
+        ]));
+      } else {
+        s2box.append(el('div', { class: 'menu-item' }, [el('span', { class: 'mi-name', text: nomeProduto(it.refId) }), el('span', { class: 'pill', text: 'do cardápio' }), rm]));
+      }
+    });
+  };
+  renderS2();
+  const s2sel = prodSelect('');
+  s2card.append(s2box,
+    el('div', { style: 'display:flex;gap:8px;margin-top:10px;flex-wrap:wrap' }, [
+      s2sel,
+      el('button', { class: 'btn btn-ghost mini', text: '+ Adicionar', onclick: () => { if (s2sel.value) { s2.itens.push({ tipo: 'ref', refId: s2sel.value }); s2sel.value = ''; renderS2(); } } }),
+      el('button', { class: 'btn btn-ghost mini', text: '🔥 Criar oferta personalizada', onclick: () => { s2.itens.push({ tipo: 'custom', id: 'promo-' + Date.now(), nome: '', desc: '', preco: 0, precoDe: null }); renderS2(); } }),
+    ]),
+    saveBtn(menu));
+  host.append(s2card);
+
+  // Upsell na sacola — escolhe do cardápio (com desconto) ou oferta livre
+  menu.upsell = menu.upsell || { ativo: false, titulo: 'Que tal adicionar?', itens: [] };
+  const up = menu.upsell; up.itens = up.itens || [];
+  const upcard = el('div', { class: 'panel-card' }, [el('h3', { text: 'Upsell (oferta na sacola)' }), el('p', { class: 'hint', text: 'Aparece na sacola antes de enviar, com 1 clique pra adicionar. Puxe um produto do cardápio (e mude o preço pra dar desconto) ou crie uma oferta livre. Ex: Água R$3, Aumentar p/ 500ml +R$5.' })]);
+  const upativo = el('input', { type: 'checkbox' }); upativo.checked = !!up.ativo; upativo.addEventListener('change', () => up.ativo = upativo.checked);
+  const uptit = el('input', { type: 'text', value: up.titulo || '', style: 'width:100%;text-align:left' }); uptit.addEventListener('input', () => up.titulo = uptit.value);
+  upcard.append(el('div', { class: 'frow' }, [el('label', { text: 'Mostrar o upsell' }), el('label', { class: 'switch' }, [upativo, el('span')])]));
+  upcard.append(el('div', { class: 'frow' }, [el('label', { text: 'Título' }), uptit]));
+  const upBox = el('div');
+  const renderUp = () => {
+    upBox.innerHTML = '';
+    if (!up.itens.length) upBox.append(el('p', { class: 'hint', text: 'Nenhuma oferta ainda. Adicione abaixo.' }));
+    up.itens.forEach((it, idx) => {
+      const thumb = it.foto ? el('img', { class: 'mi-thumb', src: it.foto }) : el('div', { class: 'mi-thumb', html: '<span>🍧</span>' });
+      const nome = el('input', { type: 'text', value: it.nome || '', placeholder: 'Nome da oferta', style: 'flex:1;text-align:left' }); nome.addEventListener('input', () => it.nome = nome.value);
+      const preco = el('input', { type: 'number', step: '0.50', value: Number(it.preco || 0).toFixed(2), style: 'width:90px;text-align:right' }); preco.addEventListener('input', () => it.preco = parseFloat(preco.value) || 0);
+      const rm = el('button', { class: 'btn btn-ghost mini', text: '✕', onclick: () => { up.itens.splice(idx, 1); renderUp(); } });
+      upBox.append(el('div', { class: 'menu-item' }, [thumb, nome, preco, fotoBtn((url) => { it.foto = url; renderUp(); }), rm]));
+    });
+  };
+  renderUp();
+  const upSel = prodSelect('');
+  upcard.append(upBox,
+    el('div', { style: 'display:flex;gap:8px;margin-top:10px;flex-wrap:wrap' }, [
+      upSel,
+      el('button', { class: 'btn btn-ghost mini', text: '+ Usar do cardápio', onclick: () => {
+        const p = produtos.find((x) => x.id === upSel.value);
+        if (p) { up.itens.push({ id: 'up-' + Date.now(), refId: p.id, nome: p.nome, preco: p.preco, foto: (menu.FOTOS_SEED || {})[p.id] || null }); upSel.value = ''; renderUp(); }
+      } }),
+      el('button', { class: 'btn btn-ghost mini', text: '+ Oferta livre', onclick: () => { up.itens.push({ id: 'up-' + Date.now(), nome: '', preco: 0 }); renderUp(); } }),
+    ]),
+    saveBtn(menu));
+  host.append(upcard);
+
   // Destaques + esgotado + preço dos combos
-  const combosCard = el('div', { class: 'panel-card' }, [el('h3', { text: 'Combinados' }), el('p', { class: 'hint', text: 'Estrela = destaque. Chave = esgotado some do cardápio. Valor = preço dos acompanhamentos (o tamanho soma por cima). Foto aparece na hora.' })]);
+  const combosCard = el('div', { class: 'panel-card' }, [el('h3', { text: 'Combinados' }), el('p', { class: 'hint', text: 'Estrela = destaque (TOP 5). Chave = esgotado some do cardápio. Valor = preço dos acompanhamentos (o tamanho soma por cima). Foto aparece na hora.' })]);
   menu.COMBOS.forEach((c) => combosCard.append(menuRow({
     id: c.id, nome: c.nome, sub: c.desc, price: c.valorBase, foto: menu.FOTOS_SEED?.[c.id],
     isDestaque: (menu.DESTAQUES || []).includes(c.id), esgotado: esgot.has(c.id),
@@ -319,7 +473,7 @@ function renderCardapio() {
   // Simples (saladas, sobremesas, bebidas)
   [['SALADAS', 'Saladas'], ['SOBREMESAS', 'Diversos'], ['BEBIDAS', 'Bebidas']].forEach(([k, label]) => {
     const card = el('div', { class: 'panel-card' }, [el('h3', { text: label })]);
-    menu[k].forEach((p) => card.append(menuRow({ id: p.id, nome: p.nome, sub: p.desc, price: p.preco, esgotado: esgot.has(p.id), onPrice: (v) => { p.preco = v; }, onEsg: () => toggleEsg(menu, p.id), noStar: true })));
+    menu[k].forEach((p) => card.append(menuRow({ id: p.id, nome: p.nome, sub: p.desc, price: p.preco, foto: menu.FOTOS_SEED?.[p.id], esgotado: esgot.has(p.id), onPrice: (v) => { p.preco = v; }, onFoto: (url) => { (menu.FOTOS_SEED = menu.FOTOS_SEED || {})[p.id] = url; }, onEsg: () => toggleEsg(menu, p.id), noStar: true })));
     card.append(saveBtn(menu));
     host.append(card);
   });

@@ -29,6 +29,8 @@ class Ticket {
 
 const padNum = (n) => String(n ?? 0).padStart(3, '0');
 const money = (v) => 'R$ ' + (Number(v) || 0).toFixed(2).replace('.', ',');
+// Cabeçalho com tipo + número do pedido: "Pedido Entrega 001" / "Pedido Retirada 001"
+const pedidoLabel = (order) => 'Pedido ' + (order.delivery_type === 'retirada' ? 'Retirada' : 'Entrega') + ' ' + padNum(order.daily_number);
 
 // Expande linhas do pedido em unidades (qtd 2 => 2 papeis)
 function explode(items) {
@@ -41,16 +43,14 @@ function explode(items) {
 export function deliveryTicket(order, store) {
   const t = new Ticket();
   const totalItens = explode(order.items).length;
+  const retirada = order.delivery_type === 'retirada';
   t.align(1).bold(true).size(0x11).line(noAccent(store?.nome || 'ACAI MAIS SABOR'));
-  t.size(0).line('VIA DO ENTREGADOR').bold(false);
-  t.size(0x11).bold(true).line('Pedido ' + padNum(order.daily_number)).size(0).bold(false);
+  t.size(0).line(retirada ? 'VIA DA RETIRADA' : 'VIA DO ENTREGADOR').bold(false);
+  t.size(0x11).bold(true).line(pedidoLabel(order)).size(0).bold(false);
   t.align(0).rule();
-  t.bold(true).line(order.delivery_type === 'retirada' ? 'RETIRADA NA LOJA' : 'ENTREGA').bold(false);
   t.line('Cliente: ' + order.customer_name);
   t.line('Tel: ' + order.customer_phone);
-  if (order.delivery_type !== 'retirada' && order.address) {
-    wrap('End: ' + order.address).forEach((l) => t.line(l));
-  }
+  if (!retirada && order.address) wrap('End: ' + order.address).forEach((l) => t.line(l));
   t.bold(true).line('Itens na sacola: ' + totalItens).bold(false);
   t.rule();
   const pg = { pix: 'PIX na entrega', cartao: 'Cartao na maquininha', dinheiro: 'Dinheiro' }[order.payment_method] || order.payment_method || '';
@@ -60,10 +60,16 @@ export function deliveryTicket(order, store) {
     t.line('Troco para: R$ ' + order.change_for + (isFinite(troco) ? '  (troco ' + money(troco) + ')' : ''));
   }
   t.line('Subtotal: ' + money(order.subtotal));
-  t.line((order.delivery_type === 'retirada' ? 'Retirada: ' : 'Taxa de entrega: ') + money(order.delivery_fee));
+  if (!retirada) t.line('Taxa de entrega: ' + money(order.delivery_fee));
   t.size(0x11).bold(true).line('TOTAL: ' + money(order.total)).size(0).bold(false);
   t.rule();
-  t.align(1).line(new Date(order.created_at || Date.now()).toLocaleString('pt-BR'));
+  const tempo = order.eta_max || order.eta_min;
+  if (tempo) {
+    const base = new Date(order.created_at || Date.now());
+    const lim = new Date(base.getTime() + Number(tempo) * 60000);
+    const hora = String(lim.getHours()).padStart(2, '0') + 'h' + String(lim.getMinutes()).padStart(2, '0');
+    t.align(1).bold(true).line((retirada ? 'Pronto ate ' : 'Entrega maxima ate ') + hora).bold(false);
+  }
   t.cut();
   return t.bytes();
 }
@@ -75,8 +81,8 @@ export function productionTickets(order) {
   const chunks = [];
   units.forEach((it, idx) => {
     const t = new Ticket();
-    t.align(1).size(0x11).bold(true).line('Pedido ' + padNum(order.daily_number)).size(0).bold(false);
-    t.line('Item ' + String(idx + 1).padStart(2, '0') + ' de ' + String(total).padStart(2, '0') + '  |  Itens no pedido: ' + total);
+    t.align(1).size(0x11).bold(true).line(pedidoLabel(order)).size(0).bold(false);
+    t.line('Producao ' + padNum(idx + 1) + ' - Item ' + String(idx + 1).padStart(2, '0') + ' de ' + String(total).padStart(2, '0'));
     t.align(0).rule();
     t.bold(true).size(0x11).line(it.nome).size(0).bold(false);
     (it.detalhes || []).forEach((d) => t.line(noAccent(d)));
