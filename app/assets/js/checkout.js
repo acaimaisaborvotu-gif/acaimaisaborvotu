@@ -203,7 +203,7 @@ export function openCheckout({ openOrders: ooInicial = 0 } = {}) {
     if (obsTxt) endereco += (endereco ? ' | ' : '') + 'Obs: ' + obsTxt;
     const order = {
       customer: { nome: state.nome.trim(), telefone: state.telefone.trim() },
-      items: items.map((i) => ({ nome: i.print?.titulo || i.nome, detalhes: i.print?.detalhes || [], qtd: i.qtd, precoUnit: i.precoUnit, tipo: i.tipo, refId: i.refId, catId: i.catId })),
+      items: items.map((i) => ({ nome: i.print?.titulo || i.nome, detalhes: i.print?.detalhes || [], extras: i.print?.extras || [], grupos: i.print?.grupos || [], qtd: i.qtd, precoUnit: i.precoUnit, tipo: i.tipo, refId: i.refId, catId: i.catId })),
       totals: { subtotal: sub, taxa: taxa(), desconto: desconto(), total: total() },
       coupon: state.cupom?.codigo || null,
       payment: { metodo: state.metodo, trocoPara: state.metodo === 'dinheiro' ? state.trocoPara : '' },

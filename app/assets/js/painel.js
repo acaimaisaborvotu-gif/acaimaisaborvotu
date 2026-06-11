@@ -33,6 +33,13 @@ const STATUS = {
 };
 const STATUS_COLOR = { novo: 'var(--magenta)', aceito: 'var(--warn)', producao: '#c98a00', pronto: 'var(--ok)', saiu: 'var(--roxo-600)', entregue: 'var(--ink-mute)' };
 
+// Próximo passo do pedido. Retirada pula "saiu para entrega" (vai de Pronto direto pra Retirado).
+function nextStep(o) {
+  const s = STATUS[o.status]; if (!s || !s.next) return null;
+  if (o.delivery_type === 'retirada' && o.status === 'pronto') return { next: 'entregue', action: 'Marcar retirado' };
+  return { next: s.next, action: s.action };
+}
+
 // ---------------------------------------------------------------- boot
 (async function boot() {
   try {
@@ -220,20 +227,20 @@ function orderCard(o) {
     ]),
     el('div', { class: 'oactions' }, [
       el('button', { class: 'btn btn-ghost mini', style: 'flex:0 0 auto', html: '🖨', title: 'Reimprimir', onclick: () => doPrint(o) }),
-      s.next ? el('button', { class: 'btn btn-primary', text: s.action, onclick: () => advance(o) }) : el('span', { class: 'muted', style: 'flex:1;text-align:center', text: 'Pedido finalizado' }),
+      nextStep(o) ? el('button', { class: 'btn btn-primary', text: nextStep(o).action, onclick: () => advance(o) }) : el('span', { class: 'muted', style: 'flex:1;text-align:center', text: 'Pedido finalizado' }),
     ]),
   ]);
   return card;
 }
 
 async function advance(o) {
-  const s = STATUS[o.status]; if (!s?.next) return;
+  const ns = nextStep(o); if (!ns) return;
   if (o.status === 'novo') { await doPrint(o); } // aceite imprime
-  const patch = { status: s.next };
-  if (s.next === 'aceito') patch.accepted_at = new Date().toISOString();
+  const patch = { status: ns.next };
+  if (ns.next === 'aceito') patch.accepted_at = new Date().toISOString();
   const { error } = await client.from('orders').update(patch).eq('id', o.id);
   if (error) return toast('Erro ao atualizar');
-  o.status = s.next; renderOrders();
+  o.status = ns.next; renderOrders();
 }
 
 async function doPrint(o) {
@@ -299,6 +306,7 @@ function mergedSeed() {
     seed.FRAPE.tamanhos.forEach((t) => { if (priceMap[t.id] != null) t.preco = priceMap[t.id]; });
     seed.MILKSHAKE.tamanhos.forEach((t) => { if (priceMap[t.id] != null) t.preco = priceMap[t.id]; });
     if (old.MILKSHAKE?.precoSaborExtra != null) seed.MILKSHAKE.precoSaborExtra = old.MILKSHAKE.precoSaborExtra;
+    (old.SOBREMESAS || []).forEach((s) => { const ns = seed.SOBREMESAS.find((x) => x.id === s.id); if (ns && s.precoBolaExtra != null) ns.precoBolaExtra = s.precoBolaExtra; });
     seed.ACOMPANHAMENTOS.forEach((g) => g.itens.forEach((i) => { if (priceMap[i.id] != null) i.preco = priceMap[i.id]; }));
     [...seed.SALADAS, ...seed.SOBREMESAS, ...seed.BEBIDAS].forEach((p) => { if (priceMap[p.id] != null) p.preco = priceMap[p.id]; });
     seed.COMBOS.forEach((c) => { if (comboBase[c.id] != null) c.valorBase = comboBase[c.id]; });
@@ -365,6 +373,19 @@ function renderCardapio() {
   });
   espCard.append(saveBtn(menu));
   host.append(espCard);
+
+  // Valores especiais: sabor extra do Milk Shake + bola extra do Petit/Brownie
+  menu.MILKSHAKE = menu.MILKSHAKE || {};
+  const valCard = el('div', { class: 'panel-card' }, [el('h3', { text: 'Valores especiais' }), el('p', { class: 'hint', text: 'Quanto soma cada extra. Reajuste quando mudar os preços.' })]);
+  const msInput = el('input', { type: 'number', step: '0.50', value: Number(menu.MILKSHAKE.precoSaborExtra ?? 5).toFixed(2), style: 'width:100px;text-align:right' });
+  msInput.addEventListener('input', () => menu.MILKSHAKE.precoSaborExtra = parseFloat(msInput.value) || 0);
+  valCard.append(el('div', { class: 'frow' }, [el('label', { text: 'Milk Shake: cada sabor a mais (R$)' }), msInput]));
+  const petit = (menu.SOBREMESAS || []).filter((s) => s.sorvete);
+  const pbInput = el('input', { type: 'number', step: '0.50', value: Number(petit[0]?.precoBolaExtra ?? 3.5).toFixed(2), style: 'width:100px;text-align:right' });
+  pbInput.addEventListener('input', () => { const v = parseFloat(pbInput.value) || 0; petit.forEach((s) => s.precoBolaExtra = v); });
+  valCard.append(el('div', { class: 'frow' }, [el('label', { text: 'Petit Gateau / Brownie: cada bola a mais (R$)' }), pbInput]));
+  valCard.append(saveBtn(menu));
+  host.append(valCard);
 
   // Seção extra (Promoção) abaixo do TOP 5 — lista compacta + seletor
   menu.secao2 = menu.secao2 || { titulo: 'Promoção da semana', ativa: false, itens: [] };

@@ -86,8 +86,18 @@ export function productionTickets(order) {
     t.line('Producao ' + padNum(idx + 1) + ' - Item ' + String(idx + 1).padStart(2, '0') + ' de ' + String(total).padStart(2, '0'));
     t.align(0).rule();
     t.bold(true).size(0x11).line(it.nome).size(0).bold(false);
-    (it.detalhes || []).forEach((d) => t.line(noAccent(d)));
-    if (!it.detalhes || !it.detalhes.length) t.line('Puro, sem acompanhamento');
+    const temNovo = (it.extras && it.extras.length) || (it.grupos && it.grupos.length);
+    if (temNovo) {
+      (it.extras || []).forEach((d) => t.line(noAccent(d)));
+      (it.grupos || []).forEach((g) => {
+        t.bold(true).line(noAccent(g.grupo + ':')).bold(false);
+        (g.itens || []).forEach((x) => t.line('  ' + noAccent(x)));
+      });
+    } else if (it.detalhes && it.detalhes.length) {
+      it.detalhes.forEach((d) => t.line(noAccent(d)));   // pedidos antigos (sem grupos)
+    } else {
+      t.line('Puro, sem acompanhamento');
+    }
     t.line(''.padEnd(WIDTH, '='));
     t.cut();
     chunks.push(t.bytes());
@@ -180,7 +190,11 @@ export const printer = {
   // ---- Comum ----
   // Imprime o pedido: 2 vias do entregador + N vias de produção (1 por item)
   async printOrder(order, store) {
-    const jobs = [deliveryTicket(order, store), deliveryTicket(order, store), ...productionTickets(order)];
+    // Entrega = 2 vias do entregador; Retirada = 1 via só.
+    const vias = order.delivery_type === 'retirada'
+      ? [deliveryTicket(order, store)]
+      : [deliveryTicket(order, store), deliveryTicket(order, store)];
+    const jobs = [...vias, ...productionTickets(order)];
     if (pcfg.method === 'serial') { for (const j of jobs) { await this.writeSerial(j); await new Promise((r) => setTimeout(r, 250)); } }
     else { await this.qzPrint(jobs); }
     return jobs.length;

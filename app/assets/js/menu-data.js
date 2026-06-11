@@ -245,19 +245,19 @@ export const MILKSHAKE = {
   ],
 };
 
-// Saladas de frutas (produto pronto, preço único)
+// Saladas de frutas (preço base + acompanhamentos opcionais; sem base de açaí)
 export const SALADAS = [
-  { id: 'salada-verao', nome: 'Salada Delícia de Verão', desc: 'Abacaxi, Banana, Mamão, Manga, Morango e Uva', preco: 17.5 },
-  { id: 'salada-maravilha', nome: 'Salada Maravilha', desc: 'Banana, Granola, Mamão, Manga e Morango', preco: 15.0 },
-  { id: 'salada-mais-sabor', nome: 'Salada Mais Sabor', desc: 'Abacaxi, Banana, Cereja, Mel e Uva', preco: 18.0 },
+  { id: 'salada-verao', nome: 'Salada Delícia de Verão', desc: 'Abacaxi, Banana, Mamão, Manga, Morango e Uva', preco: 17.5, acomp: true },
+  { id: 'salada-maravilha', nome: 'Salada Maravilha', desc: 'Banana, Granola, Mamão, Manga e Morango', preco: 15.0, acomp: true },
+  { id: 'salada-mais-sabor', nome: 'Salada Mais Sabor', desc: 'Abacaxi, Banana, Cereja, Mel e Uva', preco: 18.0, acomp: true },
 ];
 
-// Diversos / Sobremesas (preço único)
+// Diversos / Sobremesas. acomp = aceita acompanhamentos; sorvete = bola inclusa + extras.
 export const SOBREMESAS = [
   { id: 'chocolate-quente', nome: 'Chocolate Quente', preco: 13.0 },
-  { id: 'fondue', nome: 'Fondue', preco: 14.0 },
-  { id: 'petit-gateau', nome: 'Petit Gateau', desc: 'Escolha o sorvete (incluso) e turbine com acompanhamentos', preco: 23.0, sorvete: true },
-  { id: 'brownie', nome: 'Brownie', desc: 'Escolha o sorvete (incluso) e turbine com acompanhamentos', preco: 23.0, sorvete: true },
+  { id: 'fondue', nome: 'Fondue', desc: 'Turbine com os acompanhamentos que quiser', preco: 14.0, acomp: true },
+  { id: 'petit-gateau', nome: 'Petit Gateau', desc: '1 bola de sorvete inclusa e turbine com acompanhamentos', preco: 23.0, sorvete: true, precoBolaExtra: 3.5 },
+  { id: 'brownie', nome: 'Brownie', desc: '1 bola de sorvete inclusa e turbine com acompanhamentos', preco: 23.0, sorvete: true, precoBolaExtra: 3.5 },
 ];
 
 // Bebidas (preço único)

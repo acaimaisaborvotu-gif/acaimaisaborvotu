@@ -31,8 +31,14 @@ function header() {
   const cartBtn = el('button', { class: 'icon-btn', id: 'cartBtn', 'aria-label': 'Sacola', html: ICON.bag });
   cartBtn.append(el('span', { class: 'count', id: 'cartCount', text: '0', style: 'display:none' }));
   cartBtn.addEventListener('click', openCart);
+  const logo = el('img', { class: 'logo-img', src: 'assets/img/logo.png', alt: 'Açaí Mais Sabor', style: 'cursor:pointer', title: 'Voltar ao início' });
+  logo.addEventListener('click', () => {
+    const input = document.querySelector('.search input');
+    if (input && input.value) { input.value = ''; query = ''; renderSections(); }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
   return el('header', { class: 'app-header' }, el('div', { class: 'container bar' }, [
-    el('img', { class: 'logo-img', src: 'assets/img/logo.png', alt: 'Açaí Mais Sabor' }),
+    logo,
     el('div', { class: 'spacer' }),
     cartBtn,
   ]));
