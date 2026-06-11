@@ -6,7 +6,7 @@
 
 import { CONFIG, hasSupabase } from './config.js';
 import * as SEED from './menu-data.js';
-import { hmToMin } from './util.js';
+import { hmToMin, money } from './util.js';
 
 // Menu/configurações hidratados do Supabase (quando conectado). Senão, usa o seed.
 let MENU = null;
@@ -20,7 +20,7 @@ const SEED_MENU = () => ({
   COMBOS: SEED.COMBOS, DESTAQUES: SEED.DESTAQUES, FRAPE: SEED.FRAPE, MILKSHAKE: SEED.MILKSHAKE,
   SALADAS: SEED.SALADAS, SOBREMESAS: SEED.SOBREMESAS, BEBIDAS: SEED.BEBIDAS,
   CATEGORIAS: SEED.CATEGORIAS, FOTOS_SEED: SEED.FOTOS_SEED, categoriaFotos: SEED.CATEGORIA_FOTOS, esgotados: [],
-  secao2: SEED.SECAO2, upsell: SEED.UPSELL,
+  secao2: SEED.SECAO2, upsell: SEED.UPSELL, cupons: SEED.CUPONS,
 });
 
 // Catálogo corrente (hidratado ou seed). Os modais leem daqui.
@@ -112,6 +112,9 @@ export function buildCatalog() {
   const fotos = src.FOTOS_SEED || {};
   const catFotos = src.categoriaFotos || {};
   const combosById = Object.fromEntries((src.COMBOS || []).map((c) => [c.id, c]));
+  // Nome da categoria sempre vem do seed (fonte de verdade do rótulo, ex: "TOP 5"),
+  // mesmo que o Supabase tenha um nome antigo salvo.
+  const seedNomes = Object.fromEntries((SEED.CATEGORIAS || []).map((c) => [c.id, c.nome]));
   // Combinados: Ninho Trufado sempre primeiro (mais vendido)
   const combosOrdenados = [...(src.COMBOS || [])].sort((a, b) =>
     a.id === 'ninho-trufado' ? -1 : b.id === 'ninho-trufado' ? 1 : 0);
@@ -154,7 +157,7 @@ export function buildCatalog() {
         foto: fotos[s.id] || null, precoFrom: s.preco, raw: s }));
     }
     items.forEach((it) => { it.esgotado = out.has(it.id); it.emoji = EMOJI[cat.id] || '🍧'; });
-    cats.push({ ...cat, foto: catFotos[cat.id] || null, items });
+    cats.push({ ...cat, nome: seedNomes[cat.id] || cat.nome, foto: catFotos[cat.id] || null, items });
   }
   return cats;
 }
@@ -192,8 +195,38 @@ export function upsellItems() {
   return { titulo: u.titulo || 'Que tal adicionar?', itens };
 }
 
+// ---- Cupons de desconto ----
+export function cupons() {
+  return (menu().cupons || []).filter((c) => c.ativo && (c.codigo || '').trim());
+}
+// Valida o código contra o subtotal. Retorna { ok, ... } pronto pro checkout usar.
+export function validarCupom(codigo, subtotal) {
+  const code = (codigo || '').trim().toUpperCase();
+  if (!code) return { ok: false, msg: 'Digite um cupom' };
+  const c = cupons().find((x) => (x.codigo || '').trim().toUpperCase() === code);
+  if (!c) return { ok: false, msg: 'Cupom inválido ou expirado' };
+  const min = Number(c.minimo) || 0;
+  if (subtotal < min) return { ok: false, msg: `Cupom válido a partir de ${money(min)}` };
+  const bruto = c.tipo === 'percent' ? subtotal * (Number(c.valor) || 0) / 100 : (Number(c.valor) || 0);
+  const desconto = Math.round(Math.min(bruto, subtotal) * 100) / 100; // nunca passa do subtotal
+  return { ok: true, codigo: code, tipo: c.tipo, valor: Number(c.valor) || 0, desconto, msg: `Cupom ${code} aplicado` };
+}
+
+// ---- Acompanhamento de pedido (cliente) ----
+// Recebe o id (uuid) devolvido no envio e busca o status atual via RPC pública.
+export async function orderStatus(id) {
+  if (!id || !hasSupabase()) return null;
+  try {
+    const client = await sb();
+    const { data, error } = await client.rpc('order_status', { p_id: id });
+    if (error) return null;
+    const row = Array.isArray(data) ? data[0] : data;
+    return row || null;
+  } catch (e) { return null; }
+}
+
 // ---- Envio de pedido ----
-// order: { customer, items, totals, payment, delivery, whatsappText }
+// order: { customer, items, totals, payment, delivery, whatsappText, coupon }
 export async function submitOrder(order) {
   if (hasSupabase()) {
     const client = await sb();
@@ -207,7 +240,9 @@ export async function submitOrder(order) {
       change_for: order.payment.trocoPara || null,
       subtotal: order.totals.subtotal,
       delivery_fee: order.totals.taxa,
+      discount: order.totals.desconto || 0,
       total: order.totals.total,
+      coupon: order.coupon || null,
       items: order.items,
       eta_min: order.delivery.etaMin,
       eta_max: order.delivery.etaMax,

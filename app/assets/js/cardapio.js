@@ -4,7 +4,7 @@
 
 import { el, money, toast } from './util.js';
 import * as cart from './cart.js';
-import { getStore, getSettings, isOpenNow, nextOpenLabel, buildCatalog, hydrate, openOrdersCount, secao2, upsellItems } from './data.js';
+import { getStore, getSettings, isOpenNow, nextOpenLabel, buildCatalog, hydrate, secao2, upsellItems, orderStatus } from './data.js';
 import { openProduct } from './product-modal.js';
 import { openCheckout } from './checkout.js';
 import { track } from './tracking.js';
@@ -262,12 +262,10 @@ function openCart() {
     }
     foot.append(
       el('div', { style: 'flex:1' }, [el('small', { class: 'muted', text: 'Subtotal' }), el('div', { style: 'font-weight:900;font-size:1.1rem', text: money(cart.subtotal()) })]),
-      el('button', { class: 'btn btn-primary', style: 'flex:1.4', text: 'Ir para o pagamento', onclick: async (e) => {
+      el('button', { class: 'btn btn-primary', style: 'flex:1.4', text: 'Ir para o pagamento', onclick: () => {
         const min = settings.pedidoMinimo || 0;
         if (min > 0 && cart.subtotal() < min) { toast(`Pedido mínimo de ${money(min)}. Faltam ${money(min - cart.subtotal())}.`); return; }
-        e.target.disabled = true;
-        const oo = await openOrdersCount();
-        destroy(); openCheckout({ openOrders: oo });
+        destroy(); openCheckout();
       } }),
     );
   }
@@ -314,10 +312,119 @@ function observeSections() {
   document.querySelectorAll('section.section').forEach((s) => observer.observe(s));
 }
 
+// ---- Acompanhamento de pedido (status pro cliente) ----
+const PEDIDO_KEY = 'ams_pedido';
+const ST = {
+  novo: { label: 'Pedido recebido', passo: 0 },
+  aceito: { label: 'Pedido confirmado', passo: 0 },
+  producao: { label: 'Em produção 🍨', passo: 1 },
+  pronto: { label: 'Pronto! 🎉', passo: 2 },
+  saiu: { label: 'Saiu para entrega 🛵', passo: 3 },
+  entregue: { label: 'Entregue', passo: 4 },
+  cancelado: { label: 'Cancelado', passo: -1 },
+};
+const statusLabel = (s) => (ST[s] || ST.novo).label;
+let pedido = lerPedido();
+let trackRepaint = null;
+
+function lerPedido() {
+  try {
+    const p = JSON.parse(localStorage.getItem(PEDIDO_KEY) || 'null');
+    if (!p) return null;
+    if (Date.now() - (p.ts || 0) > 4 * 3600 * 1000) { localStorage.removeItem(PEDIDO_KEY); return null; } // expira em 4h
+    return p;
+  } catch (e) { return null; }
+}
+function salvarPedido() { try { localStorage.setItem(PEDIDO_KEY, JSON.stringify(pedido)); } catch (e) {} }
+function limparPedido() { try { localStorage.removeItem(PEDIDO_KEY); } catch (e) {} pedido = null; }
+
+function trackerBar() {
+  if (!pedido) return null;
+  const num = pedido.numero ? `#${String(pedido.numero).padStart(3, '0')}` : '';
+  const bar = el('div', { class: 'order-track', id: 'orderTrack' }, [
+    el('span', { class: 'ot-pulse' }),
+    el('div', { class: 'ot-info' }, [
+      el('div', { class: 'ot-num', text: `Seu pedido ${num}` }),
+      el('div', { class: 'ot-status', id: 'otStatus', text: statusLabel(pedido.status) }),
+    ]),
+    el('span', { class: 'ot-cta', text: 'Acompanhar ›' }),
+  ]);
+  bar.addEventListener('click', openTrack);
+  return bar;
+}
+
+function openTrack() {
+  if (!pedido) return;
+  const overlay = el('div', { class: 'overlay' });
+  const sheet = el('div', { class: 'sheet' });
+  const body = el('div', { class: 'sheet-body' });
+  const head = el('div', { class: 'sheet-foot', style: 'border-top:none;border-bottom:1px solid var(--line)' }, [
+    el('b', { text: `Pedido ${pedido.numero ? '#' + String(pedido.numero).padStart(3, '0') : ''}`, style: 'font-size:1.1rem;flex:1' }),
+    el('button', { class: 'icon-btn', style: 'background:var(--surface-2);color:var(--ink)', html: '&times;', onclick: () => destroy() }),
+  ]);
+  sheet.append(head, body); overlay.append(sheet); document.body.append(overlay);
+  document.body.style.overflow = 'hidden'; requestAnimationFrame(() => overlay.classList.add('show'));
+  const destroy = () => { trackRepaint = null; overlay.classList.remove('show'); document.body.style.overflow = ''; setTimeout(() => overlay.remove(), 280); };
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) destroy(); });
+
+  const paint = () => {
+    body.innerHTML = '';
+    if (!pedido) { destroy(); return; }
+    if (pedido.status === 'cancelado') {
+      body.append(el('div', { style: 'text-align:center;padding:30px 10px' }, [
+        el('div', { style: 'font-size:3rem', text: '❌' }),
+        el('div', { class: 'sheet-title', style: 'margin-top:8px', text: 'Pedido cancelado' }),
+        el('div', { class: 'sheet-desc', style: 'margin-top:6px', text: 'Se tiver dúvida, fale com a loja no WhatsApp.' }),
+        el('button', { class: 'btn btn-ghost btn-block', style: 'margin-top:18px', text: 'Ok, entendi', onclick: () => { limparPedido(); refreshTrackerUI(); destroy(); } }),
+      ]));
+      return;
+    }
+    const entrega = pedido.tipo === 'entrega';
+    const passos = entrega
+      ? [['📥', 'Pedido recebido', 0], ['🍨', 'Em produção', 1], ['✅', 'Pronto', 2], ['🛵', 'Saiu para entrega', 3], ['🎉', 'Entregue', 4]]
+      : [['📥', 'Pedido recebido', 0], ['🍨', 'Em produção', 1], ['✅', 'Pronto pra retirar', 2], ['🎉', 'Retirado', 4]];
+    const atual = (ST[pedido.status] || ST.novo).passo;
+    const eta = entrega ? `Entrega em aprox. ${pedido.etaMin} a ${pedido.etaMax} min` : `Pronto em aprox. ${pedido.etaMin} min`;
+    body.append(el('div', { class: 'sheet-desc', style: 'text-align:center;margin-bottom:10px', text: eta }));
+    const timeline = el('div', { class: 'timeline' });
+    passos.forEach(([emoji, txt, idx]) => {
+      const feito = atual >= idx;
+      const ativo = atual === idx;
+      timeline.append(el('div', { class: 'tl-step' + (feito ? ' done' : '') + (ativo ? ' active' : '') }, [
+        el('span', { class: 'tl-dot', text: feito ? emoji : '' }),
+        el('span', { class: 'tl-txt', text: txt }),
+      ]));
+    });
+    body.append(timeline);
+    if (pedido.status === 'entregue') body.append(el('button', { class: 'btn btn-primary btn-block', style: 'margin-top:18px', text: 'Concluir', onclick: () => { limparPedido(); refreshTrackerUI(); destroy(); } }));
+    else body.append(el('p', { class: 'hint', style: 'text-align:center;margin-top:14px', text: 'Atualiza sozinho. Pode fechar e voltar quando quiser.' }));
+  };
+  paint();
+  trackRepaint = paint;
+}
+
+function refreshTrackerUI() {
+  const bar = document.getElementById('orderTrack');
+  if (!pedido) bar?.remove();
+  else { const st = document.getElementById('otStatus'); if (st) st.textContent = statusLabel(pedido.status); }
+  if (trackRepaint) trackRepaint();
+}
+
+async function refreshTracker() {
+  if (!pedido) return;
+  const s = await orderStatus(pedido.id);
+  if (!s) return;
+  if (s.status && s.status !== pedido.status) { pedido.status = s.status; salvarPedido(); }
+  if (s.eta_min != null) pedido.etaMin = s.eta_min;
+  if (s.eta_max != null) pedido.etaMax = s.eta_max;
+  refreshTrackerUI();
+}
+
 // ---- Boot ----
 function boot() {
   root.innerHTML = '';
   root.append(header(), hero());
+  const tb = trackerBar(); if (tb) root.append(tb);
   const cb = closedBanner(); if (cb) root.append(cb);
   root.append(searchBar(), catNav());
   const main = el('main', { id: 'sections', style: 'padding-bottom:90px' });
@@ -332,6 +439,8 @@ cart.onChange(updateCart);
 // Abre INSTANTÂNEO: mostra o cardápio do cache local (ou seed) na hora,
 // e atualiza por trás com o Supabase (sem segurar a tela nem manter conexão ao vivo).
 settings = getSettings(); catalog = buildCatalog(); boot();
+// acompanhamento do pedido: busca o status agora e atualiza a cada 20s
+if (pedido) { refreshTracker(); setInterval(refreshTracker, 20000); }
 // assinatura inclui catálogo + promo + upsell + settings: re-renderiza se QUALQUER um mudou
 const fullSig = () => JSON.stringify({ c: catalog, s2: secao2(), up: upsellItems(), st: settings });
 let lastSig = fullSig();

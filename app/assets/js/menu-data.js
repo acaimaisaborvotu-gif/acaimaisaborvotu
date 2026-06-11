@@ -294,6 +294,10 @@ export const SECAO2 = { titulo: 'Promoção da semana', ativa: false, itens: [] 
 // itens: [{ id, nome, preco, refId? }] - refId quando veio do cardápio.
 export const UPSELL = { ativo: false, titulo: 'Que tal adicionar?', itens: [] };
 
+// Cupons de desconto (a loja cria no painel). O cliente digita no checkout.
+// item: { codigo, tipo:'percent'|'fixo', valor, minimo, ativo }
+export const CUPONS = [];
+
 // Fotos iniciais (placeholder do seed; a loja troca pelo painel depois)
 export const FOTOS_SEED = {
   'salada-verao': 'assets/img/seed/salada-frutas.png',

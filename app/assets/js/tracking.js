@@ -41,17 +41,18 @@ export const track = {
   removeFromCart(line) {
     push('remove_from_cart', { currency: 'BRL', value: line.precoUnit * line.qtd, items: [lineToGA(line)] });
   },
-  beginCheckout(items, value) {
-    push('begin_checkout', { currency: 'BRL', value, items: items.map(lineToGA) });
+  beginCheckout(items, value, coupon) {
+    push('begin_checkout', { currency: 'BRL', value, coupon: coupon || undefined, items: items.map(lineToGA) });
   },
-  addPaymentInfo(items, value, payment_type) {
-    push('add_payment_info', { currency: 'BRL', value, payment_type, items: items.map(lineToGA) });
+  addPaymentInfo(items, value, payment_type, coupon) {
+    push('add_payment_info', { currency: 'BRL', value, payment_type, coupon: coupon || undefined, items: items.map(lineToGA) });
   },
   purchase(order) {
     const nome = (order.customer?.nome || '').trim();
     push('purchase', {
       transaction_id: order.id || order.numero || String(Date.now()),
       currency: 'BRL', value: order.totals.total, shipping: order.totals.taxa,
+      coupon: order.coupon || undefined,
       items: order.items.map(lineToGA),
     }, {
       user_data: {

@@ -61,6 +61,7 @@ export function deliveryTicket(order, store) {
   }
   t.line('Subtotal: ' + money(order.subtotal));
   if (!retirada) t.line('Taxa de entrega: ' + money(order.delivery_fee));
+  if (Number(order.discount) > 0) t.line('Desconto' + (order.coupon ? ' (' + order.coupon + ')' : '') + ': -' + money(order.discount));
   t.size(0x11).bold(true).line('TOTAL: ' + money(order.total)).size(0).bold(false);
   t.rule();
   const tempo = order.eta_max || order.eta_min;

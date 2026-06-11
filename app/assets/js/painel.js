@@ -215,6 +215,7 @@ function orderCard(o) {
         el('span', { class: 'tag-pay', text: ({ pix: 'PIX', cartao: 'Cartão', dinheiro: 'Dinheiro' }[o.payment_method] || o.payment_method || '') + (o.payment_method === 'dinheiro' && o.change_for ? ` (troco p/ R$ ${o.change_for})` : '') }),
         o.printed ? el('span', { class: 'tag-pay', style: 'background:rgba(43,174,102,.12);color:var(--ok)', text: '🖨 impresso' }) : null,
       ]),
+      Number(o.discount) > 0 ? el('div', { class: 'oinfo', style: 'color:var(--ok)', text: `Desconto${o.coupon ? ' (' + o.coupon + ')' : ''}: -${money(o.discount)}` }) : null,
       el('div', { class: 'ototal' }, [el('span', { text: 'Total' }), el('span', { text: money(o.total) })]),
     ]),
     el('div', { class: 'oactions' }, [
@@ -271,7 +272,7 @@ function alertNew() {
 // ---------------------------------------------------------------- Cardápio (editor)
 function currentMenu() { return cfg.menu || seedMenu(); }
 function seedMenu() {
-  return { RECIPIENTES: SEED.RECIPIENTES, BASES: SEED.BASES, ACOMPANHAMENTOS: SEED.ACOMPANHAMENTOS, COMBOS: SEED.COMBOS, DESTAQUES: SEED.DESTAQUES, FRAPE: SEED.FRAPE, MILKSHAKE: SEED.MILKSHAKE, SALADAS: SEED.SALADAS, SOBREMESAS: SEED.SOBREMESAS, BEBIDAS: SEED.BEBIDAS, CATEGORIAS: SEED.CATEGORIAS, FOTOS_SEED: { ...SEED.FOTOS_SEED }, categoriaFotos: { ...SEED.CATEGORIA_FOTOS }, esgotados: [], secao2: { ...SEED.SECAO2, itens: [] }, upsell: { ...SEED.UPSELL, itens: [] } };
+  return { RECIPIENTES: SEED.RECIPIENTES, BASES: SEED.BASES, ACOMPANHAMENTOS: SEED.ACOMPANHAMENTOS, COMBOS: SEED.COMBOS, DESTAQUES: SEED.DESTAQUES, FRAPE: SEED.FRAPE, MILKSHAKE: SEED.MILKSHAKE, SALADAS: SEED.SALADAS, SOBREMESAS: SEED.SOBREMESAS, BEBIDAS: SEED.BEBIDAS, CATEGORIAS: SEED.CATEGORIAS, FOTOS_SEED: { ...SEED.FOTOS_SEED }, categoriaFotos: { ...SEED.CATEGORIA_FOTOS }, esgotados: [], secao2: { ...SEED.SECAO2, itens: [] }, upsell: { ...SEED.UPSELL, itens: [] }, cupons: [...(SEED.CUPONS || [])] };
 }
 // Aplica a estrutura nova do código preservando o que a loja já editou
 // (fotos, esgotados, destaques, seções E PREÇOS alterados no painel)
@@ -285,6 +286,7 @@ function mergedSeed() {
     if (old.DESTAQUES) seed.DESTAQUES = old.DESTAQUES;
     if (old.secao2) seed.secao2 = old.secao2;
     if (old.upsell) seed.upsell = old.upsell;
+    if (old.cupons) seed.cupons = old.cupons;
     // preserva preços editados (casa por id; itens removidos do seed somem naturalmente)
     const priceMap = {};
     (old.RECIPIENTES || []).forEach((r) => (r.tamanhos || []).forEach((t) => priceMap[t.id] = t.preco));
@@ -444,6 +446,35 @@ function renderCardapio() {
     ]),
     saveBtn(menu));
   host.append(upcard);
+
+  // Cupons de desconto
+  menu.cupons = menu.cupons || [];
+  const cupCard = el('div', { class: 'panel-card' }, [el('h3', { text: 'Cupons de desconto' }), el('p', { class: 'hint', text: 'O cliente digita o código no checkout. % desconta sobre o subtotal; R$ desconta um valor fixo. Mínimo = subtotal mínimo pra valer (0 = sem mínimo). Desmarque pra desativar sem apagar.' })]);
+  const cupBox = el('div');
+  const renderCup = () => {
+    cupBox.innerHTML = '';
+    if (!menu.cupons.length) cupBox.append(el('p', { class: 'hint', text: 'Nenhum cupom ainda. Crie abaixo.' }));
+    menu.cupons.forEach((c, idx) => {
+      const cod = el('input', { type: 'text', value: c.codigo || '', placeholder: 'EX: ACAI10', style: 'flex:1;min-width:90px;text-align:left;text-transform:uppercase' });
+      cod.addEventListener('input', () => c.codigo = cod.value.toUpperCase().replace(/\s/g, ''));
+      const tipo = el('select', { style: 'border:1.5px solid var(--line);border-radius:10px;padding:9px' });
+      [['percent', '%'], ['fixo', 'R$']].forEach(([v, t]) => { const o = el('option', { value: v, text: t }); if ((c.tipo || 'percent') === v) o.selected = true; tipo.append(o); });
+      tipo.addEventListener('change', () => c.tipo = tipo.value);
+      const valor = el('input', { type: 'number', step: '0.5', value: Number(c.valor || 0), placeholder: 'Valor', style: 'width:74px;text-align:right' }); valor.addEventListener('input', () => c.valor = parseFloat(valor.value) || 0);
+      const minimo = el('input', { type: 'number', step: '1', value: Number(c.minimo || 0), placeholder: 'Mín', style: 'width:64px;text-align:right' }); minimo.addEventListener('input', () => c.minimo = parseFloat(minimo.value) || 0);
+      const ativo = el('input', { type: 'checkbox' }); ativo.checked = c.ativo !== false; ativo.addEventListener('change', () => c.ativo = ativo.checked);
+      const rm = el('button', { class: 'btn btn-ghost mini', text: '✕', onclick: () => { menu.cupons.splice(idx, 1); renderCup(); } });
+      cupBox.append(el('div', { class: 'menu-item', style: 'flex-wrap:wrap;gap:6px' }, [
+        cod, tipo, valor, el('span', { class: 'hint', style: 'margin:0', text: 'mín' }), minimo,
+        el('label', { class: 'switch', style: 'flex:0 0 auto' }, [ativo, el('span')]), rm,
+      ]));
+    });
+  };
+  renderCup();
+  cupCard.append(cupBox,
+    el('button', { class: 'btn btn-ghost mini', style: 'margin-top:10px', text: '+ Novo cupom', onclick: () => { menu.cupons.push({ codigo: '', tipo: 'percent', valor: 10, minimo: 0, ativo: true }); renderCup(); } }),
+    saveBtn(menu));
+  host.append(cupCard);
 
   // Destaques + esgotado + preço dos combos
   const combosCard = el('div', { class: 'panel-card' }, [el('h3', { text: 'Combinados' }), el('p', { class: 'hint', text: 'Estrela = destaque (TOP 5). Chave = esgotado some do cardápio. Valor = preço dos acompanhamentos (o tamanho soma por cima). Foto aparece na hora.' })]);

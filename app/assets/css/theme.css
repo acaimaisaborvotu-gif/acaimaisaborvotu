@@ -330,3 +330,29 @@ textarea.obs:focus { border-color: var(--magenta); }
 /* ---- Seletor de recipiente (modal) ---- */
 .seg-recip { display: flex; gap: 6px; padding: 6px; background: var(--surface-2); border-radius: var(--r-sm); margin-bottom: 8px; }
 .opt-hint { color: var(--ink-mute); font-size: .88rem; padding: 14px 4px; text-align: center; border: 1.5px dashed var(--line); border-radius: var(--r-sm); }
+
+/* ---- Botão WhatsApp ---- */
+.btn-whats { background: #25d366; color: #fff; box-shadow: 0 6px 16px rgba(37, 211, 102, .4); display: inline-flex; align-items: center; justify-content: center; }
+.btn-whats:hover { background: #1eb858; }
+
+/* ---- Barra de acompanhamento de pedido ---- */
+.order-track { display: flex; align-items: center; gap: 12px; margin: 12px 16px 0; padding: 12px 14px; border-radius: var(--r-md); background: var(--grad-acai); color: #fff; box-shadow: var(--sh-2); cursor: pointer; }
+.order-track .ot-pulse { flex: 0 0 auto; width: 11px; height: 11px; border-radius: 50%; background: #5dff9b; box-shadow: 0 0 0 0 rgba(93, 255, 155, .7); animation: otpulse 1.8s infinite; }
+@keyframes otpulse { 0% { box-shadow: 0 0 0 0 rgba(93, 255, 155, .6); } 70% { box-shadow: 0 0 0 9px rgba(93, 255, 155, 0); } 100% { box-shadow: 0 0 0 0 rgba(93, 255, 155, 0); } }
+.order-track .ot-info { flex: 1; min-width: 0; }
+.order-track .ot-num { font-size: .76rem; opacity: .85; font-weight: 700; }
+.order-track .ot-status { font-size: 1.02rem; font-weight: 900; line-height: 1.2; }
+.order-track .ot-cta { flex: 0 0 auto; font-weight: 800; font-size: .9rem; background: rgba(255, 255, 255, .18); padding: 7px 12px; border-radius: 999px; }
+
+/* ---- Timeline de status (sheet) ---- */
+.timeline { display: flex; flex-direction: column; gap: 0; padding: 6px 4px; }
+.timeline .tl-step { display: flex; align-items: center; gap: 13px; padding: 9px 0; position: relative; }
+.timeline .tl-step::before { content: ''; position: absolute; left: 17px; top: -16px; width: 2px; height: 28px; background: var(--line); }
+.timeline .tl-step:first-child::before { display: none; }
+.timeline .tl-dot { flex: 0 0 auto; width: 36px; height: 36px; border-radius: 50%; background: var(--surface-2); border: 2px solid var(--line); display: grid; place-items: center; font-size: 1.1rem; z-index: 1; }
+.timeline .tl-txt { font-weight: 700; color: var(--ink-mute); }
+.timeline .tl-step.done .tl-dot { background: var(--ok); border-color: var(--ok); }
+.timeline .tl-step.done::before { background: var(--ok); }
+.timeline .tl-step.done .tl-txt { color: var(--ink); }
+.timeline .tl-step.active .tl-dot { background: var(--magenta); border-color: var(--magenta); box-shadow: 0 0 0 4px rgba(214, 33, 127, .18); }
+.timeline .tl-step.active .tl-txt { color: var(--magenta); font-weight: 900; }
