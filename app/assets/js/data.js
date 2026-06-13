@@ -6,7 +6,7 @@
 
 import { CONFIG, hasSupabase } from './config.js';
 import * as SEED from './menu-data.js';
-import { hmToMin, money } from './util.js';
+import { hmToMin, money, phoneCanon } from './util.js';
 
 // Menu/configurações hidratados do Supabase (quando conectado). Senão, usa o seed.
 let MENU = null;
@@ -223,6 +223,49 @@ export async function orderStatus(id) {
     const row = Array.isArray(data) ? data[0] : data;
     return row || null;
   } catch (e) { return null; }
+}
+
+// ---- Carrinho abandonado (lead) ----
+// Grava/atualiza o lead quando o cliente preenche nome+telefone. Best-effort:
+// NUNCA trava o checkout; falha silenciosa. O place_order marca como convertido depois.
+export async function captureLead({ telefone, nome, items = [], cartValue = 0, step = 1 }) {
+  if (!hasSupabase()) return { ok: false };
+  const phone = phoneCanon(telefone);
+  if (!phone || phone.length < 12) return { ok: false };
+  try {
+    const client = await sb();
+    await client.rpc('capture_lead', {
+      p: {
+        store_slug: CONFIG.STORE_ID, phone, name: (nome || '').trim(), step, cart_value: cartValue,
+        items: (items || []).map((i) => ({ nome: i.print?.titulo || i.nome, qtd: i.qtd, precoUnit: i.precoUnit })),
+      },
+    });
+    return { ok: true };
+  } catch (e) { return { ok: false }; }
+}
+
+// ---- Login do cliente por telefone (sem senha; exige telefone + 1º nome) ----
+// Retorna { found:true, name, last_address, orders_count, total_spent, last_order_at } ou { found:false }.
+export async function customerLogin(telefone, nome) {
+  if (!hasSupabase()) return { found: false };
+  try {
+    const client = await sb();
+    const { data, error } = await client.rpc('customer_login', { p: { store_slug: CONFIG.STORE_ID, phone: phoneCanon(telefone), name: (nome || '').trim() } });
+    if (error) return { found: false };
+    const row = Array.isArray(data) ? data[0] : data;
+    return row && row.found ? row : { found: false };
+  } catch (e) { return { found: false }; }
+}
+
+// Histórico de pedidos do cliente (mesma checagem telefone + 1º nome).
+export async function customerOrders(telefone, nome) {
+  if (!hasSupabase()) return [];
+  try {
+    const client = await sb();
+    const { data, error } = await client.rpc('customer_orders', { p: { store_slug: CONFIG.STORE_ID, phone: phoneCanon(telefone), name: (nome || '').trim() } });
+    if (error || !data) return [];
+    return Array.isArray(data) ? data : [];
+  } catch (e) { return []; }
 }
 
 // ---- Envio de pedido ----

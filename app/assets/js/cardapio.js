@@ -2,9 +2,9 @@
 // CARDÁPIO PÚBLICO — controlador principal
 // =============================================================================
 
-import { el, money, toast } from './util.js';
+import { el, money, toast, maskPhone, phoneValido } from './util.js';
 import * as cart from './cart.js';
-import { getStore, getSettings, isOpenNow, nextOpenLabel, buildCatalog, hydrate, secao2, upsellItems, orderStatus } from './data.js';
+import { getStore, getSettings, isOpenNow, nextOpenLabel, buildCatalog, hydrate, secao2, upsellItems, orderStatus, customerLogin, customerOrders } from './data.js';
 import { openProduct } from './product-modal.js';
 import { openCheckout } from './checkout.js';
 import { track } from './tracking.js';
@@ -12,6 +12,7 @@ import { track } from './tracking.js';
 const ICON = {
   search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>',
   bag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 7h12l-1 13H7L6 7Z"/><path d="M9 7a3 3 0 0 1 6 0"/></svg>',
+  user: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg>',
 };
 
 const store = getStore();
@@ -37,9 +38,16 @@ function header() {
     if (input && input.value) { input.value = ''; query = ''; renderSections(); }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   });
+  const entrar = el('button', { class: 'icon-btn', id: 'entrarBtn', 'aria-label': 'Entrar / Meus pedidos', title: 'Entrar / Meus pedidos', html: ICON.user });
+  entrar.addEventListener('click', () => {
+    const c = clienteSalvo();
+    if (c.telefone && c.nome) openMeusPedidos({ nome: c.nome, telefone: c.telefone });
+    else openLogin();
+  });
   return el('header', { class: 'app-header' }, el('div', { class: 'container bar' }, [
     logo,
     el('div', { class: 'spacer' }),
+    entrar,
     cartBtn,
   ]));
 }
@@ -424,6 +432,88 @@ async function refreshTracker() {
   if (s.eta_min != null) pedido.etaMin = s.eta_min;
   if (s.eta_max != null) pedido.etaMax = s.eta_max;
   refreshTrackerUI();
+}
+
+// ---- Login do cliente por telefone + Meus pedidos ----
+function clienteSalvo() { try { return JSON.parse(localStorage.getItem('ams_cliente') || '{}') || {}; } catch (e) { return {}; } }
+
+function loginSheet(titulo) {
+  const overlay = el('div', { class: 'overlay' });
+  const sheet = el('div', { class: 'sheet' });
+  const body = el('div', { class: 'sheet-body' });
+  const destroy = () => { overlay.classList.remove('show'); document.body.style.overflow = ''; setTimeout(() => overlay.remove(), 280); };
+  const head = el('div', { class: 'sheet-foot', style: 'border-top:none;border-bottom:1px solid var(--line)' }, [
+    el('b', { text: titulo, style: 'font-size:1.1rem;flex:1' }),
+    el('button', { class: 'icon-btn', style: 'background:var(--surface-2);color:var(--ink)', html: '&times;', onclick: () => destroy() }),
+  ]);
+  sheet.append(head, body); overlay.append(sheet); document.body.append(overlay);
+  document.body.style.overflow = 'hidden'; requestAnimationFrame(() => overlay.classList.add('show'));
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) destroy(); });
+  return { body, destroy };
+}
+
+function openLogin() {
+  const { body, destroy } = loginSheet('Entrar');
+  const c = clienteSalvo();
+  const inStyle = 'width:100%;border:1.5px solid var(--line);border-radius:12px;padding:13px;outline:none';
+  const nome = el('input', { style: inStyle, placeholder: 'Seu nome', value: c.nome || '', autocomplete: 'name' });
+  const tel = el('input', { style: inStyle, placeholder: '(17) 99999-9999', value: c.telefone || '', type: 'tel', inputmode: 'tel', autocomplete: 'tel' });
+  const aplica = () => { tel.value = maskPhone(tel.value); };
+  tel.addEventListener('input', aplica); tel.addEventListener('change', aplica);
+  const msg = el('div', { class: 'sheet-desc', style: 'margin-top:8px;color:var(--magenta)' });
+  const btn = el('button', { class: 'btn btn-primary btn-block', style: 'margin-top:16px', text: 'Ver meus pedidos' });
+  btn.addEventListener('click', async () => {
+    const t = maskPhone(tel.value), n = nome.value.trim();
+    if (n.length < 2 || !phoneValido(t)) { msg.textContent = 'Preencha o nome e o telefone certinho.'; return; }
+    btn.disabled = true; btn.textContent = 'Entrando...';
+    const r = await customerLogin(t, n);
+    if (r && r.found) {
+      try { localStorage.setItem('ams_cliente', JSON.stringify({ ...clienteSalvo(), nome: r.name || n, telefone: t })); } catch (e) {}
+      track.generateLead(t, n, 'login');
+      destroy(); openMeusPedidos({ nome: r.name || n, telefone: t, resumo: r });
+    } else {
+      btn.disabled = false; btn.textContent = 'Ver meus pedidos';
+      msg.textContent = 'Não achei pedidos com esse nome e telefone. Se for seu primeiro pedido, é só montar no cardápio.';
+    }
+  });
+  body.append(
+    el('div', { class: 'sheet-title', text: 'Já pediu aqui?' }),
+    el('div', { class: 'sheet-desc', text: 'Coloque seu telefone e nome pra ver seus pedidos e já preencher tudo automático na próxima.' }),
+    el('label', { class: 'opt-group', style: 'display:block;margin-top:12px' }, [el('div', { class: 'opt-head' }, el('div', { class: 't', text: 'Nome' })), nome]),
+    el('label', { class: 'opt-group', style: 'display:block' }, [el('div', { class: 'opt-head' }, el('div', { class: 't', text: 'Telefone' })), tel]),
+    msg, btn,
+    el('p', { class: 'hint', style: 'text-align:center;margin-top:12px', text: 'Usamos só pra identificar seus pedidos. Sem senha.' }),
+  );
+}
+
+async function openMeusPedidos(cliente) {
+  const { body, destroy } = loginSheet(`Olá, ${(cliente.nome || '').split(' ')[0] || 'cliente'}`);
+  let r = cliente.resumo;
+  const badges = el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px' });
+  body.append(badges);
+  body.append(el('button', { class: 'btn btn-ghost btn-block mini', style: 'margin-bottom:12px', text: 'Sair desta conta', onclick: () => { try { const cur = clienteSalvo(); delete cur.nome; delete cur.telefone; localStorage.setItem('ams_cliente', JSON.stringify(cur)); } catch (e) {} destroy(); toast('Você saiu'); } }));
+  const lista = el('div', {}, el('p', { class: 'hint', style: 'text-align:center', text: 'Buscando seus pedidos...' }));
+  body.append(lista);
+  if (!r) r = await customerLogin(cliente.telefone, cliente.nome);
+  if (r && r.orders_count != null) {
+    badges.append(el('span', { class: 'pill pill-ok', text: `${r.orders_count} pedido${r.orders_count === 1 ? '' : 's'}` }));
+    if (r.total_spent != null) badges.append(el('span', { class: 'pill', text: `Total ${money(r.total_spent)}` }));
+  }
+  const pedidos = await customerOrders(cliente.telefone, cliente.nome);
+  lista.innerHTML = '';
+  if (!pedidos.length) { lista.append(el('div', { class: 'center muted', style: 'padding:30px 10px' }, [el('div', { style: 'font-size:2.2rem', text: '🧾' }), el('p', { style: 'margin-top:8px', text: 'Você ainda não tem pedidos por aqui.' })])); return; }
+  pedidos.forEach((o) => {
+    const dataTxt = (() => { try { return new Date(o.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }); } catch (e) { return ''; } })();
+    const itens = (o.items || []).map((i) => `${i.qtd}x ${i.nome}`).join(', ');
+    lista.append(el('div', { class: 'opt-group', style: 'margin-bottom:8px' }, [
+      el('div', { style: 'display:flex;justify-content:space-between;align-items:center;gap:8px' }, [
+        el('b', { text: `#${String(o.daily_number || 0).padStart(3, '0')} · ${dataTxt}` }),
+        el('span', { class: 'pill', style: 'flex:none', text: statusLabel(o.status) }),
+      ]),
+      itens ? el('small', { class: 'muted', style: 'display:block;margin-top:4px', text: itens }) : null,
+      el('div', { class: 'oprice', style: 'margin-top:4px', text: money(o.total) }),
+    ]));
+  });
 }
 
 // ---- Boot ----

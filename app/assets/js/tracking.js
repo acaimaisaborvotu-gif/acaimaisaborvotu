@@ -5,6 +5,8 @@
 //  - user_data no purchase (telefone E.164, nome, cidade) p/ advanced matching
 //    (enviar em claro pro server container; o sGTM/Meta hasheia)
 // =============================================================================
+import { phoneE164 } from './util.js';
+
 window.dataLayer = window.dataLayer || [];
 
 const newEventId = () =>
@@ -20,17 +22,17 @@ const lineToGA = (l) => ({
   price: Number(l.precoUnit?.toFixed?.(2) ?? l.precoUnit), quantity: l.qtd || 1,
 });
 
-// Telefone BR -> E.164 (+5517999998888)
-function phoneE164(tel) {
-  const d = String(tel || '').replace(/\D/g, '');
-  if (d.length === 10 || d.length === 11) return '+55' + d;
-  if (d.length === 12 || d.length === 13) return '+' + d;
-  return d ? '+' + d : undefined;
-}
-
 export const track = {
   search(term) {
     window.dataLayer.push({ event: 'search', event_id: newEventId(), search_term: term });
+  },
+  // Lead gerado (cliente preencheu nome+telefone no checkout, ou logou pelo telefone)
+  generateLead(telefone, nome, stage) {
+    const n = (nome || '').trim();
+    window.dataLayer.push({
+      event: 'generate_lead', event_id: newEventId(), lead_stage: stage,
+      user_data: { phone_number: phoneE164(telefone), first_name: n.split(' ')[0] || undefined },
+    });
   },
   viewItem(item) {
     push('view_item', { currency: 'BRL', value: item.precoFrom, items: [{ item_id: item.id, item_name: item.nome, item_category: item.catId, price: item.precoFrom }] });
