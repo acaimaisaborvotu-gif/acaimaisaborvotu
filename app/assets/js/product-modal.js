@@ -28,10 +28,11 @@ function acompGrouped(state) {
   return out;
 }
 
-// Linha "Base:/Bases:" que vai abaixo do recipiente (impressao e sacola).
-function baseLinhaTxt(state) {
+// Seção "Base:/Bases:" com cada base em "1x Nome" (padrão igual os acompanhamentos).
+function baseBloco(state) {
   const ns = M.BASES.filter((b) => state.bases.has(b.id)).map((b) => b.nome);
-  return `${ns.length > 1 ? 'Bases' : 'Base'}: ${ns.join(', ') || 'Açaí'}`;
+  const lista = ns.length ? ns : ['Açaí'];
+  return { t: 'sec', nome: lista.length > 1 ? 'Bases' : 'Base', itens: lista.map((n) => `1x ${n}`) };
 }
 
 function overlayShell(item) {
@@ -298,47 +299,53 @@ export function openProduct(item, onAdd) {
 }
 
 function buildLine(item, state, unit, temAcomp) {
-  // acompanhamentos agrupados por categoria -> [{grupo, itens:['1x Morango', ...]}]
-  const grupos = acompGrouped(state).map((g) => ({ grupo: g.grupo, itens: g.itens.map((i) => `${i.qtd}x ${i.nome}`) }));
-  const extras = [];          // linhas avulsas (base, sorvete, obs)
+  // acompanhamentos como seções "Grupo:" + "1x Item" (padrão da impressão)
+  const acompBlocos = acompGrouped(state).map((g) => ({ t: 'sec', nome: g.grupo, itens: g.itens.map((i) => `${i.qtd}x ${i.nome}`) }));
+  const blocos = [];          // lista ordenada: {t:'sec',nome,itens} ou {t:'txt',txt}
   let titulo = item.nome;
 
   if (item.tipo === 'monte') {
     const t = M.RECIPIENTES.flatMap((r) => r.tamanhos).find((x) => x.id === state.tamanhoId);
     const recip = M.RECIPIENTES.find((r) => r.tamanhos.some((x) => x.id === state.tamanhoId));
     titulo = `${recip.nome} ${t.ml}ml`;
-    extras.push(baseLinhaTxt(state));
-    if (!grupos.length) extras.push('Sem acompanhamento');
+    blocos.push(baseBloco(state));
+    if (!acompBlocos.length) blocos.push({ t: 'txt', txt: 'Sem acompanhamento' });
+    blocos.push(...acompBlocos);
   } else if (item.tipo === 'combo') {
     const recs = comboRecips();
     const t = recs.flatMap((r) => r.tamanhos).find((x) => x.id === state.tamanhoId);
     const recip = recs.find((r) => r.tamanhos.some((x) => x.id === state.tamanhoId));
     titulo = `${recip.nome} ${t.ml}ml`;
-    extras.push(baseLinhaTxt(state), `Combinado ${item.nome}`);
-    if (item.desc) extras.push(item.desc);
+    blocos.push(baseBloco(state), { t: 'txt', txt: `Combinado ${item.nome}` });
+    if (item.desc) blocos.push({ t: 'txt', txt: item.desc });
+    blocos.push(...acompBlocos);
   } else if (item.tipo === 'frape') {
     const t = M.FRAPE.tamanhos.find((x) => x.id === state.tamanhoId);
     titulo = `Frapê ${t.ml}ml`;
-    extras.push(baseLinhaTxt(state));
+    blocos.push(baseBloco(state), ...acompBlocos);
   } else if (item.tipo === 'milkshake') {
     const t = M.MILKSHAKE.tamanhos.find((x) => x.id === state.tamanhoId);
     const nomes = M.MILKSHAKE.sabores.filter((s) => state.sabores.has(s.id)).map((s) => s.nome);
     titulo = `Milk-shake ${t.ml}ml`;
-    extras.push(`Sabores: ${nomes.join(' + ')}`);
+    blocos.push({ t: 'sec', nome: 'Sabores', itens: nomes.map((n) => `1x ${n}`) });
   } else if (item.tipo === 'sorvete') {
     const svGroup = M.ACOMPANHAMENTOS.find((g) => g.id === 'sorvetes');
     const bolas = [...state.bolas.entries()].map(([id, q]) => { const s = svGroup?.itens.find((x) => x.id === id); return s ? `${q}x ${s.nome}` : null; }).filter(Boolean);
     titulo = item.nome;
-    extras.push(`Sorvete: ${bolas.join(', ')}`);
+    blocos.push({ t: 'sec', nome: 'Sorvete', itens: bolas }, ...acompBlocos);
+  } else {
+    // simples (salada/fondue com acomp, ou bebida/chocolate quente sem nada)
+    titulo = item.nome;
+    blocos.push(...acompBlocos);
   }
-  if (state.obs) extras.push(`Obs: ${state.obs}`);
+  if (state.obs) blocos.push({ t: 'txt', txt: `Obs: ${state.obs}` });
 
   // versão compacta em strings (sacola / checkout / WhatsApp)
-  const detalhes = [...extras, ...grupos.map((g) => `${g.grupo}: ${g.itens.join(', ')}`)];
+  const detalhes = blocos.map((b) => b.t === 'sec' ? `${b.nome}: ${b.itens.join(', ')}` : b.txt);
 
   return {
     tipo: item.tipo, refId: item.id, catId: item.catId, nome: titulo,
     precoUnit: Number(unit.toFixed(2)), qtd: state.qtd,
-    print: { titulo, extras, grupos, detalhes }, obs: state.obs,
+    print: { titulo, blocos, detalhes }, obs: state.obs,
   };
 }

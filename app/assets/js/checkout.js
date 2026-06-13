@@ -5,7 +5,7 @@
 
 import { el, money, toast, maskPhone, phoneCanon, phoneValido, ICON_WHATS } from './util.js';
 import * as cart from './cart.js';
-import { getStore, getSettings, isOpenNow, tempoEntrega, submitOrder, openOrdersCount, validarCupom, captureLead } from './data.js';
+import { getStore, getSettings, isOpenNow, tempoEntrega, tempoRetirada, submitOrder, openOrdersCount, validarCupom, captureLead, customerLogin } from './data.js';
 import { track } from './tracking.js';
 
 const PAGAMENTOS = {
@@ -171,9 +171,13 @@ export function openCheckout({ openOrders: ooInicial = 0 } = {}) {
       ]));
     } else {
       const inp = el('input', { style: inputStyle + ';text-transform:uppercase;flex:1', placeholder: 'Tem um cupom? Digite aqui', value: '' });
-      const aplicar = () => {
+      const aplicar = async () => {
         const r = validarCupom(inp.value, sub);
         if (!r.ok) return toast(r.msg);
+        if (r.primeiraCompra) {
+          const c = await customerLogin(state.telefone, state.nome);
+          if (c && c.found && c.orders_count > 0) return toast('Esse cupom vale só na primeira compra.');
+        }
         state.cupom = r; toast(r.msg); render();
       };
       inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); aplicar(); } });
@@ -210,6 +214,7 @@ export function openCheckout({ openOrders: ooInicial = 0 } = {}) {
     const btn = foot.querySelector('button.btn-primary');
     btn.disabled = true; btn.innerHTML = 'Enviando...';
     const eta = tempoEntrega(openOrders, settings);
+    const retMin = tempoRetirada(openOrders, settings);
     const obsTxt = state.obs.trim();
     let endereco = '';
     if (state.tipo === 'entrega') {
@@ -218,11 +223,11 @@ export function openCheckout({ openOrders: ooInicial = 0 } = {}) {
     if (obsTxt) endereco += (endereco ? ' | ' : '') + 'Obs: ' + obsTxt;
     const order = {
       customer: { nome: state.nome.trim(), telefone: state.telefone.trim() },
-      items: items.map((i) => ({ nome: i.print?.titulo || i.nome, detalhes: i.print?.detalhes || [], extras: i.print?.extras || [], grupos: i.print?.grupos || [], qtd: i.qtd, precoUnit: i.precoUnit, tipo: i.tipo, refId: i.refId, catId: i.catId })),
+      items: items.map((i) => ({ nome: i.print?.titulo || i.nome, detalhes: i.print?.detalhes || [], blocos: i.print?.blocos || [], qtd: i.qtd, precoUnit: i.precoUnit, tipo: i.tipo, refId: i.refId, catId: i.catId })),
       totals: { subtotal: sub, taxa: taxa(), desconto: desconto(), total: total() },
       coupon: state.cupom?.codigo || null,
       payment: { metodo: state.metodo, trocoPara: state.metodo === 'dinheiro' ? state.trocoPara : '' },
-      delivery: { tipo: state.tipo, endereco, etaMin: state.tipo === 'entrega' ? eta.min : settings.retiradaMinutos, etaMax: state.tipo === 'entrega' ? eta.max : settings.retiradaMinutos },
+      delivery: { tipo: state.tipo, endereco, etaMin: state.tipo === 'entrega' ? eta.min : retMin, etaMax: state.tipo === 'entrega' ? eta.max : retMin },
     };
     order.whatsappText = buildWhatsApp(order, store);
     // salva os dados do cliente no aparelho pra próxima vez

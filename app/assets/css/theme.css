@@ -356,3 +356,9 @@ textarea.obs:focus { border-color: var(--magenta); }
 .timeline .tl-step.done .tl-txt { color: var(--ink); }
 .timeline .tl-step.active .tl-dot { background: var(--magenta); border-color: var(--magenta); box-shadow: 0 0 0 4px rgba(214, 33, 127, .18); }
 .timeline .tl-step.active .tl-txt { color: var(--magenta); font-weight: 900; }
+
+/* ---- Painel: edição de nome/descrição dos itens ---- */
+.menu-item.mi-editavel { align-items: flex-start; flex-wrap: wrap; }
+.menu-item .mi-edit { width: 100%; border: 1.5px solid var(--line); border-radius: 8px; padding: 7px 9px; font-size: .92rem; font-weight: 700; color: var(--ink); outline: none; }
+.menu-item .mi-edit:focus { border-color: var(--magenta); }
+.menu-item .mi-edit.mi-desc { font-weight: 400; font-size: .82rem; margin-top: 5px; color: var(--ink-soft); }

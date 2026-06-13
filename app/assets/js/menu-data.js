@@ -18,7 +18,9 @@ export const STORE = {
 export const SETTINGS = {
   taxaEntrega: 8.0,          // taxa fixa por enquanto
   pedidoMinimo: 0,           // 0 = sem mínimo
-  retiradaMinutos: 20,       // tempo estimado de retirada na loja
+  retiradaMinutos: 20,       // tempo base de retirada na loja
+  retiradaIncrementoMin: 5,  // +X min de retirada por lote de pedidos abertos
+  retiradaIncrementoCadaPedidos: 10, // a cada N pedidos abertos
   // Tempo de entrega dinâmico
   tempoBaseMin: 40,          // faixa base (min)
   tempoBaseMax: 50,          // faixa base (max)

@@ -279,7 +279,7 @@ function alertNew() {
 // ---------------------------------------------------------------- Cardápio (editor)
 function currentMenu() { return cfg.menu || seedMenu(); }
 function seedMenu() {
-  return { RECIPIENTES: SEED.RECIPIENTES, BASES: SEED.BASES, ACOMPANHAMENTOS: SEED.ACOMPANHAMENTOS, COMBOS: SEED.COMBOS, DESTAQUES: SEED.DESTAQUES, FRAPE: SEED.FRAPE, MILKSHAKE: SEED.MILKSHAKE, SALADAS: SEED.SALADAS, SOBREMESAS: SEED.SOBREMESAS, BEBIDAS: SEED.BEBIDAS, CATEGORIAS: SEED.CATEGORIAS, FOTOS_SEED: { ...SEED.FOTOS_SEED }, categoriaFotos: { ...SEED.CATEGORIA_FOTOS }, esgotados: [], secao2: { ...SEED.SECAO2, itens: [] }, upsell: { ...SEED.UPSELL, itens: [] }, cupons: [...(SEED.CUPONS || [])] };
+  return { RECIPIENTES: SEED.RECIPIENTES, BASES: SEED.BASES, ACOMPANHAMENTOS: SEED.ACOMPANHAMENTOS, COMBOS: SEED.COMBOS, DESTAQUES: SEED.DESTAQUES, FRAPE: SEED.FRAPE, MILKSHAKE: SEED.MILKSHAKE, SALADAS: SEED.SALADAS, SOBREMESAS: SEED.SOBREMESAS, BEBIDAS: SEED.BEBIDAS, CATEGORIAS: SEED.CATEGORIAS, FOTOS_SEED: { ...SEED.FOTOS_SEED }, categoriaFotos: { ...SEED.CATEGORIA_FOTOS }, esgotados: [], secao2: { ...SEED.SECAO2, itens: [] }, upsell: { ...SEED.UPSELL, itens: [] }, cupons: [...(SEED.CUPONS || [])], removidos: [] };
 }
 // Aplica a estrutura nova do código preservando o que a loja já editou
 // (fotos, esgotados, destaques, seções E PREÇOS alterados no painel)
@@ -287,6 +287,14 @@ function mergedSeed() {
   const seed = seedMenu();
   const old = cfg.menu;
   if (old) {
+    // tombstones: remove do seed os itens-padrão que a loja apagou de propósito (senão o "Atualizar" os ressuscitaria)
+    const rem = new Set(old.removidos || []);
+    if (rem.size) {
+      seed.COMBOS = seed.COMBOS.filter((c) => !rem.has(c.id));
+      seed.ACOMPANHAMENTOS.forEach((g) => { g.itens = g.itens.filter((i) => !rem.has(i.id)); });
+      ['SALADAS', 'SOBREMESAS', 'BEBIDAS'].forEach((k) => { seed[k] = seed[k].filter((p) => !rem.has(p.id)); });
+    }
+    seed.removidos = old.removidos || [];
     seed.FOTOS_SEED = { ...seed.FOTOS_SEED, ...(old.FOTOS_SEED || {}) };
     seed.categoriaFotos = { ...seed.categoriaFotos, ...(old.categoriaFotos || {}) };
     seed.esgotados = old.esgotados || [];
@@ -310,6 +318,20 @@ function mergedSeed() {
     seed.ACOMPANHAMENTOS.forEach((g) => g.itens.forEach((i) => { if (priceMap[i.id] != null) i.preco = priceMap[i.id]; }));
     [...seed.SALADAS, ...seed.SOBREMESAS, ...seed.BEBIDAS].forEach((p) => { if (priceMap[p.id] != null) p.preco = priceMap[p.id]; });
     seed.COMBOS.forEach((c) => { if (comboBase[c.id] != null) c.valorBase = comboBase[c.id]; });
+    // preserva NOMES e DESCRICOES editados (por id)
+    const nameMap = {}, descMap = {};
+    (old.COMBOS || []).forEach((c) => { nameMap[c.id] = c.nome; descMap[c.id] = c.desc; });
+    (old.ACOMPANHAMENTOS || []).forEach((g) => (g.itens || []).forEach((i) => { nameMap[i.id] = i.nome; }));
+    [...(old.SALADAS || []), ...(old.SOBREMESAS || []), ...(old.BEBIDAS || [])].forEach((p) => { nameMap[p.id] = p.nome; descMap[p.id] = p.desc; });
+    seed.COMBOS.forEach((c) => { if (nameMap[c.id] != null) c.nome = nameMap[c.id]; if (descMap[c.id] != null) c.desc = descMap[c.id]; });
+    seed.ACOMPANHAMENTOS.forEach((g) => g.itens.forEach((i) => { if (nameMap[i.id] != null) i.nome = nameMap[i.id]; }));
+    [...seed.SALADAS, ...seed.SOBREMESAS, ...seed.BEBIDAS].forEach((p) => { if (nameMap[p.id] != null) p.nome = nameMap[p.id]; if (descMap[p.id] != null) p.desc = descMap[p.id]; });
+    ['FRAPE', 'MILKSHAKE'].forEach((k) => { if (old[k] && old[k].nome) seed[k].nome = old[k].nome; if (old[k] && old[k].desc) seed[k].desc = old[k].desc; });
+    // itens CRIADOS pela loja (nao existem no seed do codigo) -> mantem
+    const sCombo = new Set(seed.COMBOS.map((c) => c.id));
+    (old.COMBOS || []).forEach((c) => { if (!sCombo.has(c.id)) seed.COMBOS.push(c); });
+    seed.ACOMPANHAMENTOS.forEach((sg) => { const og = (old.ACOMPANHAMENTOS || []).find((g) => g.id === sg.id); if (og) { const ids = new Set(sg.itens.map((i) => i.id)); (og.itens || []).forEach((i) => { if (!ids.has(i.id)) sg.itens.push(i); }); } });
+    ['SALADAS', 'SOBREMESAS', 'BEBIDAS'].forEach((k) => { const ids = new Set(seed[k].map((p) => p.id)); (old[k] || []).forEach((p) => { if (!ids.has(p.id)) seed[k].push(p); }); });
   }
   return seed;
 }
@@ -352,7 +374,7 @@ function renderCardapio() {
   // Atualizar estrutura nova (preserva fotos/esgotados/destaques)
   host.append(el('div', { class: 'panel-card' }, [
     el('h3', { text: 'Atualizar cardápio' }),
-    el('p', { class: 'hint', text: 'Aplica melhorias de estrutura do sistema (categorias, ajustes). Suas fotos, esgotados e destaques são mantidos.' }),
+    el('p', { class: 'hint', text: 'Aplica melhorias de estrutura do sistema. Seus preços, nomes, descrições, fotos, esgotados, destaques e os itens que você criou ou removeu são mantidos.' }),
     el('button', { class: 'btn btn-ghost', text: 'Atualizar para a versão mais nova', onclick: async (e) => { e.target.disabled = true; if (await saveMenu(mergedSeed())) renderCardapio(); else e.target.disabled = false; } }),
   ]));
 
@@ -484,9 +506,11 @@ function renderCardapio() {
       const valor = el('input', { type: 'number', step: '0.5', value: Number(c.valor || 0), placeholder: 'Valor', style: 'width:74px;text-align:right' }); valor.addEventListener('input', () => c.valor = parseFloat(valor.value) || 0);
       const minimo = el('input', { type: 'number', step: '1', value: Number(c.minimo || 0), placeholder: 'Mín', style: 'width:64px;text-align:right' }); minimo.addEventListener('input', () => c.minimo = parseFloat(minimo.value) || 0);
       const ativo = el('input', { type: 'checkbox' }); ativo.checked = c.ativo !== false; ativo.addEventListener('change', () => c.ativo = ativo.checked);
+      const primeira = el('input', { type: 'checkbox' }); primeira.checked = !!c.primeiraCompra; primeira.addEventListener('change', () => c.primeiraCompra = primeira.checked);
       const rm = el('button', { class: 'btn btn-ghost mini', text: '✕', onclick: () => { menu.cupons.splice(idx, 1); renderCup(); } });
       cupBox.append(el('div', { class: 'menu-item', style: 'flex-wrap:wrap;gap:6px' }, [
         cod, tipo, valor, el('span', { class: 'hint', style: 'margin:0', text: 'mín' }), minimo,
+        el('label', { style: 'display:flex;align-items:center;gap:4px;flex:0 0 auto', title: 'Vale só na primeira compra do cliente' }, [primeira, el('span', { class: 'hint', style: 'margin:0', text: '1ª compra' })]),
         el('label', { class: 'switch', style: 'flex:0 0 auto' }, [ativo, el('span')]), rm,
       ]));
     });
@@ -497,14 +521,17 @@ function renderCardapio() {
     saveBtn(menu));
   host.append(cupCard);
 
-  // Destaques + esgotado + preço dos combos
-  const combosCard = el('div', { class: 'panel-card' }, [el('h3', { text: 'Combinados' }), el('p', { class: 'hint', text: 'Estrela = destaque (TOP 5). Chave = esgotado some do cardápio. Valor = preço dos acompanhamentos (o tamanho soma por cima). Foto aparece na hora.' })]);
+  // Combinados: nome, ingredientes, preço, destaque, esgotado, foto, adicionar/remover
+  const combosCard = el('div', { class: 'panel-card' }, [el('h3', { text: 'Combinados' }), el('p', { class: 'hint', text: 'Edite nome e ingredientes. Estrela = TOP 5. Chave = esgotado. Valor = preço base (o tamanho soma por cima). "+ Novo" cria um combinado.' })]);
   menu.COMBOS.forEach((c) => combosCard.append(menuRow({
     id: c.id, nome: c.nome, sub: c.desc, price: c.valorBase, foto: menu.FOTOS_SEED?.[c.id],
     isDestaque: (menu.DESTAQUES || []).includes(c.id), esgotado: esgot.has(c.id),
+    onName: (v) => { c.nome = v; }, onDesc: (v) => { c.desc = v; },
     onPrice: (v) => { c.valorBase = v; }, onStar: () => toggleDestaque(menu, c.id),
     onEsg: () => toggleEsg(menu, c.id), onFoto: (url) => { (menu.FOTOS_SEED = menu.FOTOS_SEED || {})[c.id] = url; },
+    onRemove: () => { if (confirm(`Remover "${c.nome}"?`)) { (menu.removidos = menu.removidos || []).push(c.id); menu.COMBOS = menu.COMBOS.filter((x) => x.id !== c.id); renderCardapio(); } },
   })));
+  combosCard.append(el('button', { class: 'btn btn-ghost mini', style: 'margin-top:8px', text: '+ Novo combinado', onclick: () => { menu.COMBOS.push({ id: 'combo-' + Date.now(), nome: 'Novo combinado', desc: '', valorBase: 10 }); renderCardapio(); } }));
   combosCard.append(saveBtn(menu));
   host.append(combosCard);
 
@@ -516,31 +543,52 @@ function renderCardapio() {
   recCard.append(saveBtn(menu));
   host.append(recCard);
 
-  // Acompanhamentos (preços)
-  const acCard = el('div', { class: 'panel-card' }, [el('h3', { text: 'Acompanhamentos' }), el('p', { class: 'hint', text: 'Preço de cada acompanhamento e esgotar item.' })]);
-  menu.ACOMPANHAMENTOS.forEach((g) => { acCard.append(el('div', { style: 'font-weight:800;margin-top:10px', text: g.nome })); g.itens.forEach((it) => acCard.append(menuRow({ id: it.id, nome: it.nome, price: it.preco, esgotado: esgot.has(it.id), onPrice: (v) => { it.preco = v; }, onEsg: () => toggleEsg(menu, it.id), noStar: true }))); });
+  // Acompanhamentos: nome, preço, esgotado, adicionar/remover por grupo
+  const acCard = el('div', { class: 'panel-card' }, [el('h3', { text: 'Acompanhamentos' }), el('p', { class: 'hint', text: 'Edite nome e preço de cada acompanhamento. "+ Adicionar" cria um novo no grupo.' })]);
+  menu.ACOMPANHAMENTOS.forEach((g) => {
+    acCard.append(el('div', { style: 'font-weight:800;margin-top:10px', text: g.nome }));
+    g.itens.forEach((it) => acCard.append(menuRow({ id: it.id, nome: it.nome, price: it.preco, esgotado: esgot.has(it.id), onName: (v) => { it.nome = v; }, onPrice: (v) => { it.preco = v; }, onEsg: () => toggleEsg(menu, it.id), noStar: true, onRemove: () => { if (confirm(`Remover "${it.nome}"?`)) { (menu.removidos = menu.removidos || []).push(it.id); g.itens = g.itens.filter((x) => x.id !== it.id); renderCardapio(); } } })));
+    acCard.append(el('button', { class: 'btn btn-ghost mini', style: 'margin:4px 0 6px', text: '+ Adicionar em ' + g.nome, onclick: () => { g.itens.push({ id: g.id + '-' + Date.now(), nome: 'Novo item', preco: 3 }); renderCardapio(); } }));
+  });
   acCard.append(saveBtn(menu));
   host.append(acCard);
 
-  // Simples (saladas, sobremesas, bebidas)
+  // Frapê e Milk Shake: nome e descrição editáveis (ex: "Cremoso, escolha o sabor")
+  menu.FRAPE = menu.FRAPE || {}; menu.MILKSHAKE = menu.MILKSHAKE || {};
+  const espNomeCard = el('div', { class: 'panel-card' }, [el('h3', { text: 'Frapê e Milk Shake' }), el('p', { class: 'hint', text: 'Nome e descrição que aparecem no cardápio.' })]);
+  [['FRAPE', 'Frapê'], ['MILKSHAKE', 'Milk Shake']].forEach(([k]) => espNomeCard.append(menuRow({ id: k, nome: menu[k].nome, sub: menu[k].desc, onName: (v) => { menu[k].nome = v; }, onDesc: (v) => { menu[k].desc = v; }, noStar: true, simple: true })));
+  espNomeCard.append(saveBtn(menu));
+  host.append(espNomeCard);
+
+  // Simples (saladas, diversos, bebidas): nome, descrição, preço, foto, adicionar/remover
   [['SALADAS', 'Saladas'], ['SOBREMESAS', 'Diversos'], ['BEBIDAS', 'Bebidas']].forEach(([k, label]) => {
-    const card = el('div', { class: 'panel-card' }, [el('h3', { text: label })]);
-    menu[k].forEach((p) => card.append(menuRow({ id: p.id, nome: p.nome, sub: p.desc, price: p.preco, foto: menu.FOTOS_SEED?.[p.id], esgotado: esgot.has(p.id), onPrice: (v) => { p.preco = v; }, onFoto: (url) => { (menu.FOTOS_SEED = menu.FOTOS_SEED || {})[p.id] = url; }, onEsg: () => toggleEsg(menu, p.id), noStar: true })));
+    const card = el('div', { class: 'panel-card' }, [el('h3', { text: label }), el('p', { class: 'hint', text: 'Edite nome, descrição e preço. "+ Adicionar" cria um item.' })]);
+    menu[k].forEach((p) => card.append(menuRow({ id: p.id, nome: p.nome, sub: p.desc, price: p.preco, foto: menu.FOTOS_SEED?.[p.id], esgotado: esgot.has(p.id), onName: (v) => { p.nome = v; }, onDesc: (v) => { p.desc = v; }, onPrice: (v) => { p.preco = v; }, onFoto: (url) => { (menu.FOTOS_SEED = menu.FOTOS_SEED || {})[p.id] = url; }, onEsg: () => toggleEsg(menu, p.id), noStar: true, onRemove: () => { if (confirm(`Remover "${p.nome}"?`)) { (menu.removidos = menu.removidos || []).push(p.id); menu[k] = menu[k].filter((x) => x.id !== p.id); renderCardapio(); } } })));
+    card.append(el('button', { class: 'btn btn-ghost mini', style: 'margin-top:8px', text: '+ Adicionar', onclick: () => { menu[k].push({ id: k.toLowerCase() + '-' + Date.now(), nome: 'Novo item', desc: '', preco: 5, ...(k === 'SALADAS' ? { acomp: true } : {}) }); renderCardapio(); } }));
     card.append(saveBtn(menu));
     host.append(card);
   });
 }
 
-function menuRow({ id, nome, sub, price, foto, isDestaque, esgotado, onPrice, onStar, onEsg, onFoto, simple, noStar }) {
+function menuRow({ id, nome, sub, price, foto, isDestaque, esgotado, onPrice, onStar, onEsg, onFoto, onName, onDesc, onRemove, simple, noStar }) {
   const priceInput = price == null ? null : el('input', { class: 'price', type: 'number', step: '0.50', value: Number(price).toFixed(2) });
   if (priceInput) priceInput.addEventListener('input', () => onPrice(parseFloat(priceInput.value) || 0));
-  const row = el('div', { class: 'menu-item' }, [
+  // Nome: editável quando onName é passado; senão texto.
+  let nameEl;
+  if (onName) { const i = el('input', { class: 'mi-edit', type: 'text', value: nome || '', placeholder: 'Nome do item' }); i.addEventListener('input', () => onName(i.value)); nameEl = i; }
+  else nameEl = el('span', { text: nome });
+  // Descrição: editável quando onDesc é passado; senão small (se houver).
+  let descEl = null;
+  if (onDesc) { const d = el('input', { class: 'mi-edit mi-desc', type: 'text', value: sub || '', placeholder: 'Descrição / ingredientes' }); d.addEventListener('input', () => onDesc(d.value)); descEl = d; }
+  else if (sub) descEl = el('small', { text: sub });
+  const row = el('div', { class: 'menu-item' + (onName ? ' mi-editavel' : '') }, [
     !simple ? (foto ? el('img', { class: 'mi-thumb', src: foto }) : el('div', { class: 'mi-thumb', html: '<span>🍧</span>' })) : null,
-    el('div', { class: 'mi-name' }, [nome, sub ? el('small', { text: sub }) : null]),
+    el('div', { class: 'mi-name' }, [nameEl, descEl]),
     !noStar && !simple ? starEl(isDestaque, onStar) : null,
     priceInput,
     onFoto ? fotoBtn(onFoto) : null,
     onEsg ? esgSwitch(esgotado, onEsg) : null,
+    onRemove ? el('button', { class: 'btn btn-ghost mini', title: 'Remover', text: '✕', onclick: () => onRemove() }) : null,
   ]);
   return row;
 }
@@ -598,6 +646,8 @@ function renderConfig() {
     numRow('Tempo base máximo (min)', s.tempoBaseMax, (v) => s.tempoBaseMax = v),
     numRow('Acrescentar (min)', s.tempoIncrementoMin, (v) => s.tempoIncrementoMin = v),
     numRow('A cada quantos pedidos abertos', s.tempoIncrementoCadaPedidos, (v) => s.tempoIncrementoCadaPedidos = v),
+    numRow('Retirada: acrescentar (min)', s.retiradaIncrementoMin || 0, (v) => s.retiradaIncrementoMin = v),
+    numRow('Retirada: a cada quantos pedidos', s.retiradaIncrementoCadaPedidos || 10, (v) => s.retiradaIncrementoCadaPedidos = v),
   ]);
 
   const pays = el('div', { class: 'panel-card' }, [el('h3', { text: 'Formas de pagamento (na entrega)' })]);

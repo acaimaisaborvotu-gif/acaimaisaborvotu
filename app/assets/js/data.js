@@ -93,6 +93,13 @@ export function tempoEntrega(openOrders = 0, settings = getSettings()) {
   return { min: settings.tempoBaseMin + extras, max: settings.tempoBaseMax + extras };
 }
 
+// Tempo de retirada (também dinâmico): base + incremento por pedidos abertos.
+export function tempoRetirada(openOrders = 0, settings = getSettings()) {
+  const cada = Math.max(1, settings.retiradaIncrementoCadaPedidos || settings.tempoIncrementoCadaPedidos || 10);
+  const extras = Math.floor(openOrders / cada) * (settings.retiradaIncrementoMin || 0);
+  return (settings.retiradaMinutos || 20) + extras;
+}
+
 // ---- Preços ----
 const recipMin = () => Math.min(...menu().RECIPIENTES.flatMap((r) => r.tamanhos.map((t) => t.preco)));
 const comboSizes = () => menu().RECIPIENTES.filter((r) => r.id === 'copo' || r.id === 'tigela');
@@ -209,7 +216,7 @@ export function validarCupom(codigo, subtotal) {
   if (subtotal < min) return { ok: false, msg: `Cupom válido a partir de ${money(min)}` };
   const bruto = c.tipo === 'percent' ? subtotal * (Number(c.valor) || 0) / 100 : (Number(c.valor) || 0);
   const desconto = Math.round(Math.min(bruto, subtotal) * 100) / 100; // nunca passa do subtotal
-  return { ok: true, codigo: code, tipo: c.tipo, valor: Number(c.valor) || 0, desconto, msg: `Cupom ${code} aplicado` };
+  return { ok: true, codigo: code, tipo: c.tipo, valor: Number(c.valor) || 0, desconto, primeiraCompra: !!c.primeiraCompra, msg: `Cupom ${code} aplicado` };
 }
 
 // ---- Acompanhamento de pedido (cliente) ----

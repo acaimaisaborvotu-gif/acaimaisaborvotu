@@ -51,6 +51,7 @@ export function deliveryTicket(order, store) {
   t.line('Cliente: ' + order.customer_name);
   t.line('Tel: ' + order.customer_phone);
   if (!retirada && order.address) wrap('End: ' + order.address).forEach((l) => t.line(l));
+  else if (retirada && order.address) wrap(order.address).forEach((l) => t.line(l)); // na retirada o address carrega a observação do cliente
   t.bold(true).line('Itens na sacola: ' + totalItens).bold(false);
   t.rule();
   const pg = { pix: 'PIX na entrega', cartao: 'Cartao na maquininha', dinheiro: 'Dinheiro' }[order.payment_method] || order.payment_method || '';
@@ -86,18 +87,16 @@ export function productionTickets(order) {
     t.line('Producao ' + padNum(idx + 1) + ' - Item ' + String(idx + 1).padStart(2, '0') + ' de ' + String(total).padStart(2, '0'));
     t.align(0).rule();
     t.bold(true).size(0x11).line(it.nome).size(0).bold(false);
-    const temNovo = (it.extras && it.extras.length) || (it.grupos && it.grupos.length);
-    if (temNovo) {
-      (it.extras || []).forEach((d) => t.line(noAccent(d)));
-      (it.grupos || []).forEach((g) => {
-        t.bold(true).line(noAccent(g.grupo + ':')).bold(false);
-        (g.itens || []).forEach((x) => t.line('  ' + noAccent(x)));
+    const blocos = it.blocos || [];
+    if (blocos.length) {
+      blocos.forEach((b) => {
+        if (b.t === 'sec') { t.bold(true).line(noAccent(b.nome + ':')).bold(false); (b.itens || []).forEach((x) => t.line('  ' + noAccent(x))); }
+        else t.line(noAccent(b.txt));
       });
     } else if (it.detalhes && it.detalhes.length) {
-      it.detalhes.forEach((d) => t.line(noAccent(d)));   // pedidos antigos (sem grupos)
-    } else {
-      t.line('Puro, sem acompanhamento');
+      it.detalhes.forEach((d) => t.line(noAccent(d)));   // pedidos antigos (formato anterior)
     }
+    // itens simples (bebida, chocolate quente) saem so com o nome, sem "Puro, sem acompanhamento"
     t.line(''.padEnd(WIDTH, '='));
     t.cut();
     chunks.push(t.bytes());
