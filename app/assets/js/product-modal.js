@@ -28,6 +28,12 @@ function acompGrouped(state) {
   return out;
 }
 
+// Linha "Base:/Bases:" que vai abaixo do recipiente (impressao e sacola).
+function baseLinhaTxt(state) {
+  const ns = M.BASES.filter((b) => state.bases.has(b.id)).map((b) => b.nome);
+  return `${ns.length > 1 ? 'Bases' : 'Base'}: ${ns.join(', ') || 'Açaí'}`;
+}
+
 function overlayShell(item) {
   const overlay = el('div', { class: 'overlay' });
   const sheet = el('div', { class: 'sheet' });
@@ -101,7 +107,7 @@ function sizePicker(recipientes, state, recompute) {
 // Grupo de Base (req+). Açaí em primeiro, mas NADA pré-marcado.
 function baseGroup(state) {
   const gb = el('div', { class: 'opt-group' });
-  gb.append(groupHead('Base', 'Escolha pelo menos 1. Pode trocar o açaí ou combinar mais de uma.', 'req+'));
+  gb.append(groupHead('Base', 'Escolha pelo menos 1. Pode trocar o Açaí ou combinar mais de uma base.', 'req+'));
   M.BASES.forEach((b) => {
     const mark = el('span', { class: 'mark sq', html: state.bases.has(b.id) ? '&#10003;' : '' });
     const row = el('div', { class: 'opt' + (state.bases.has(b.id) ? ' sel' : '') }, [
@@ -300,22 +306,20 @@ function buildLine(item, state, unit, temAcomp) {
   if (item.tipo === 'monte') {
     const t = M.RECIPIENTES.flatMap((r) => r.tamanhos).find((x) => x.id === state.tamanhoId);
     const recip = M.RECIPIENTES.find((r) => r.tamanhos.some((x) => x.id === state.tamanhoId));
-    const baseNomes = M.BASES.filter((b) => state.bases.has(b.id)).map((b) => b.nome);
-    titulo = `${baseNomes.join(' + ') || 'Açaí'} ${recip.nome} ${t.ml}ml`;
+    titulo = `${recip.nome} ${t.ml}ml`;
+    extras.push(baseLinhaTxt(state));
     if (!grupos.length) extras.push('Sem acompanhamento');
   } else if (item.tipo === 'combo') {
     const recs = comboRecips();
     const t = recs.flatMap((r) => r.tamanhos).find((x) => x.id === state.tamanhoId);
     const recip = recs.find((r) => r.tamanhos.some((x) => x.id === state.tamanhoId));
-    const baseNomes = M.BASES.filter((b) => state.bases.has(b.id)).map((b) => b.nome);
-    titulo = `Combinado ${item.nome} (${recip.nome} ${t.ml}ml)`;
-    extras.push(`Base: ${baseNomes.join(' + ') || 'Açaí'}`);
+    titulo = `${recip.nome} ${t.ml}ml`;
+    extras.push(baseLinhaTxt(state), `Combinado ${item.nome}`);
     if (item.desc) extras.push(item.desc);
   } else if (item.tipo === 'frape') {
     const t = M.FRAPE.tamanhos.find((x) => x.id === state.tamanhoId);
-    const baseNomes = M.BASES.filter((b) => state.bases.has(b.id)).map((b) => b.nome);
     titulo = `Frapê ${t.ml}ml`;
-    extras.push(`Base: ${baseNomes.join(' + ') || 'Açaí'}`);
+    extras.push(baseLinhaTxt(state));
   } else if (item.tipo === 'milkshake') {
     const t = M.MILKSHAKE.tamanhos.find((x) => x.id === state.tamanhoId);
     const nomes = M.MILKSHAKE.sabores.filter((s) => state.sabores.has(s.id)).map((s) => s.nome);

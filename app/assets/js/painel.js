@@ -36,7 +36,7 @@ const STATUS_COLOR = { novo: 'var(--magenta)', aceito: 'var(--warn)', producao: 
 // Próximo passo do pedido. Retirada pula "saiu para entrega" (vai de Pronto direto pra Retirado).
 function nextStep(o) {
   const s = STATUS[o.status]; if (!s || !s.next) return null;
-  if (o.delivery_type === 'retirada' && o.status === 'pronto') return { next: 'entregue', action: 'Marcar retirado' };
+  if (o.delivery_type === 'retirada' && o.status === 'pronto') return { next: 'entregue', action: 'Marcar retirada' };
   return { next: s.next, action: s.action };
 }
 
