@@ -167,7 +167,7 @@ async function logout() { await client.auth.signOut(); location.reload(); }
 function renderApp() {
   app.innerHTML = '';
   const isOwner = profile.role === 'owner';
-  const tabs = [['pedidos', 'Pedidos'], isOwner ? ['clientes', 'Clientes'] : null, isOwner ? ['dashboard', 'Dashboard'] : null, ['cardapio', 'Cardápio'], isOwner ? ['config', 'Configurações'] : null, ['impressora', 'Impressora']].filter(Boolean);
+  const tabs = [['pedidos', 'Pedidos'], ['clientes', 'Clientes'], isOwner ? ['dashboard', 'Dashboard'] : null, ['cardapio', 'Cardápio'], isOwner ? ['config', 'Configurações'] : null, ['impressora', 'Impressora']].filter(Boolean);
   const tabNav = el('div', { class: 'pn-tabs' }, tabs.map(([id, label]) => {
     const b = el('button', { class: id === tab ? 'active' : '', 'data-tab': id, text: label });
     if (id === 'pedidos') { const n = orders.filter((o) => o.status === 'novo').length; if (n) b.append(el('span', { class: 'badge', text: n })); }
@@ -185,7 +185,7 @@ function renderApp() {
   );
   ({
     pedidos: renderOrders,
-    clientes: () => renderClientes(document.getElementById('tabContent'), client, STORE_SLUG, store.nome),
+    clientes: () => renderClientes(document.getElementById('tabContent'), client, STORE_SLUG, store.nome, (currentMenu() || {}).textos),
     dashboard: () => renderDashboard(document.getElementById('tabContent'), client, STORE_SLUG),
     cardapio: renderCardapio, config: renderConfig, impressora: renderImpressora,
   }[tab])();
@@ -334,6 +334,9 @@ function mergedSeed() {
     seed.COMBOS.forEach((c) => { if (nameMap[c.id] != null) c.nome = nameMap[c.id]; if (descMap[c.id] != null) c.desc = descMap[c.id]; });
     seed.ACOMPANHAMENTOS.forEach((g) => g.itens.forEach((i) => { if (nameMap[i.id] != null) i.nome = nameMap[i.id]; }));
     [...seed.SALADAS, ...seed.SOBREMESAS, ...seed.BEBIDAS].forEach((p) => { if (nameMap[p.id] != null) p.nome = nameMap[p.id]; if (descMap[p.id] != null) p.desc = descMap[p.id]; });
+    // preserva os SABORES (tipos) que a loja editou nas bebidas
+    const tiposMap = {}; (old.BEBIDAS || []).forEach((p) => { if (Array.isArray(p.tipos)) tiposMap[p.id] = p.tipos; });
+    seed.BEBIDAS.forEach((p) => { if (tiposMap[p.id]) p.tipos = tiposMap[p.id]; });
     ['FRAPE', 'MILKSHAKE'].forEach((k) => { if (old[k] && old[k].nome) seed[k].nome = old[k].nome; if (old[k] && old[k].desc) seed[k].desc = old[k].desc; });
     // itens CRIADOS pela loja (nao existem no seed do codigo) -> mantem
     const sCombo = new Set(seed.COMBOS.map((c) => c.id));
@@ -582,10 +585,31 @@ function renderCardapio() {
   );
   host.append(txtCard);
 
+  // Mensagens de WhatsApp usadas na aba Clientes (CRM)
+  const waCard = el('div', { class: 'panel-card' }, [
+    el('h3', { text: 'Mensagens de WhatsApp (Clientes)' }),
+    el('p', { class: 'hint', text: 'O texto que já vem pronto ao clicar no WhatsApp na aba Clientes. Use {nome} pro primeiro nome do cliente e {loja} pro nome da loja.' }),
+  ]);
+  const waRow = (label, key, def) => {
+    const t = el('textarea', { rows: 3, style: 'width:100%;text-align:left;resize:vertical' });
+    t.value = menu.textos[key] || def || '';
+    t.addEventListener('input', () => menu.textos[key] = t.value);
+    return el('div', { class: 'frow', style: 'flex-direction:column;align-items:stretch;gap:4px' }, [el('label', { text: label }), t]);
+  };
+  waCard.append(
+    waRow('Cliente sumido (sem pedir há um tempo)', 'waInativo', SEED.TEXTOS.waInativo),
+    waRow('Abandonou o carrinho (entrou no checkout e não finalizou)', 'waAbandono', SEED.TEXTOS.waAbandono),
+    saveBtn(menu),
+  );
+  host.append(waCard);
+
   // Simples (saladas, diversos, bebidas): nome, descrição, preço, foto, adicionar/remover
   [['SALADAS', 'Saladas'], ['SOBREMESAS', 'Diversos'], ['BEBIDAS', 'Bebidas']].forEach(([k, label]) => {
     const card = el('div', { class: 'panel-card' }, [el('h3', { text: label }), el('p', { class: 'hint', text: 'Edite nome, descrição e preço. "+ Adicionar" cria um item.' })]);
-    menu[k].forEach((p) => card.append(menuRow({ id: p.id, nome: p.nome, sub: p.desc, price: p.preco, foto: menu.FOTOS_SEED?.[p.id], esgotado: esgot.has(p.id), onName: (v) => { p.nome = v; }, onDesc: (v) => { p.desc = v; }, onPrice: (v) => { p.preco = v; }, onFoto: (url) => { (menu.FOTOS_SEED = menu.FOTOS_SEED || {})[p.id] = url; }, onEsg: () => toggleEsg(menu, p.id), noStar: true, onRemove: () => { if (confirm(`Remover "${p.nome}"?`)) { (menu.removidos = menu.removidos || []).push(p.id); menu[k] = menu[k].filter((x) => x.id !== p.id); renderCardapio(); } } })));
+    menu[k].forEach((p) => {
+      card.append(menuRow({ id: p.id, nome: p.nome, sub: p.desc, price: p.preco, foto: menu.FOTOS_SEED?.[p.id], esgotado: esgot.has(p.id), onName: (v) => { p.nome = v; }, onDesc: (v) => { p.desc = v; }, onPrice: (v) => { p.preco = v; }, onFoto: (url) => { (menu.FOTOS_SEED = menu.FOTOS_SEED || {})[p.id] = url; }, onEsg: () => toggleEsg(menu, p.id), noStar: true, onRemove: () => { if (confirm(`Remover "${p.nome}"?`)) { (menu.removidos = menu.removidos || []).push(p.id); menu[k] = menu[k].filter((x) => x.id !== p.id); renderCardapio(); } } }));
+      if (k === 'BEBIDAS') card.append(tiposEditor(p));
+    });
     card.append(el('button', { class: 'btn btn-ghost mini', style: 'margin-top:8px', text: '+ Adicionar', onclick: () => { menu[k].push({ id: k.toLowerCase() + '-' + Date.now(), nome: 'Novo item', desc: '', preco: 5, ...(k === 'SALADAS' ? { acomp: true } : {}) }); renderCardapio(); } }));
     card.append(saveBtn(menu));
     host.append(card);
@@ -613,6 +637,28 @@ function menuRow({ id, nome, sub, price, foto, isDestaque, esgotado, onPrice, on
     onRemove ? el('button', { class: 'btn btn-ghost mini', title: 'Remover', text: '✕', onclick: () => onRemove() }) : null,
   ]);
   return row;
+}
+// Editor de sabores de uma bebida (ex: Coca, Guaraná). O cliente escolhe 1 ao adicionar.
+function tiposEditor(p) {
+  const wrap = el('div', { class: 'tipos-editor' });
+  const render = () => {
+    wrap.innerHTML = '';
+    p.tipos = p.tipos || [];
+    const chips = el('div', { class: 'tipos-chips' }, p.tipos.map((nome, i) => el('span', { class: 'tipo-chip' }, [
+      el('span', { text: nome }),
+      el('button', { class: 'tipo-x', type: 'button', text: '✕', title: 'Remover sabor', onclick: () => { p.tipos.splice(i, 1); render(); } }),
+    ])));
+    const inp = el('input', { class: 'mi-edit', type: 'text', placeholder: 'Ex: Coca-Cola, Guaraná...' });
+    const addTipo = () => { const v = inp.value.trim(); if (!v) return; (p.tipos = p.tipos || []).push(v); inp.value = ''; render(); inp.focus(); };
+    inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addTipo(); } });
+    wrap.append(
+      el('div', { class: 'hint', style: 'margin:2px 0', text: p.tipos.length ? 'Sabores (o cliente escolhe 1):' : 'Sem sabores. Adicione p/ o cliente escolher (ex: Coca, Guaraná).' }),
+      chips,
+      el('div', { class: 'tipos-add' }, [inp, el('button', { class: 'btn btn-ghost mini', type: 'button', text: '+ Sabor', onclick: addTipo })]),
+    );
+  };
+  render();
+  return wrap;
 }
 function starEl(on, cb) { const s = el('span', { class: 'star' + (on ? ' on' : ''), text: '★' }); s.addEventListener('click', () => { const nowOn = cb(); s.classList.toggle('on', nowOn); }); return s; }
 function esgSwitch(on, cb) { const inp = el('input', { type: 'checkbox' }); inp.checked = !on; const lbl = el('label', { class: 'switch', title: 'Disponível' }, [inp, el('span')]); inp.addEventListener('change', () => cb()); return lbl; }

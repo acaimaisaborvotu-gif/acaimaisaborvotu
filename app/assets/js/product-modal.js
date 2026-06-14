@@ -172,8 +172,10 @@ const totalBolas = (state) => [...state.bolas.values()].reduce((a, b) => a + b, 
 export function openProduct(item, onAdd) {
   M = menu();
   const { body, foot, destroy } = overlayShell(item);
-  const state = { recipienteId: null, tamanhoId: null, bases: new Set(), acomp: new Map(), sabores: new Set(), bolas: new Map(), obs: '', qtd: 1 };
+  const state = { recipienteId: null, tamanhoId: null, bases: new Set(), acomp: new Map(), sabores: new Set(), bolas: new Map(), tipo: null, obs: '', qtd: 1 };
   const temAcomp = item.tipo === 'simples' && item.raw && item.raw.acomp;
+  const tipos = (item.tipo === 'simples' && item.raw && Array.isArray(item.raw.tipos)) ? item.raw.tipos.filter(Boolean) : [];
+  const temTipos = tipos.length > 0;
 
   body.append(el('div', { class: 'sheet-title', text: item.tipo === 'combo' ? `Combinado ${item.nome}` : item.nome }));
   if (item.desc) body.append(el('div', { class: 'sheet-desc', text: item.desc }));
@@ -232,6 +234,24 @@ export function openProduct(item, onAdd) {
     acompGroupsOrdered().forEach((g) => body.append(acompGroup(g, state)));
   }
 
+  if (temTipos) {
+    const gt = el('div', { class: 'opt-group' });
+    gt.append(groupHead('Sabor', 'Escolha o sabor', 'req'));
+    tipos.forEach((nome) => {
+      const mark = el('span', { class: 'mark', html: '' });
+      const row = el('div', { class: 'opt' }, [el('span', { class: 'oname', text: nome }), mark]);
+      row.addEventListener('click', () => {
+        state.tipo = nome;
+        [...gt.querySelectorAll('.opt')].forEach((o) => o.classList.remove('sel'));
+        [...gt.querySelectorAll('.mark')].forEach((m) => m.innerHTML = '');
+        row.classList.add('sel'); mark.innerHTML = '&#10003;';
+        recompute();
+      });
+      gt.append(row);
+    });
+    body.append(gt);
+  }
+
   const gobs = el('div', { class: 'opt-group' });
   gobs.append(groupHead('Observação', (M.textos || {}).obsExemplo || 'Ex: sem granola', 'opt'));
   const ta = el('textarea', { class: 'obs', placeholder: (M.textos || {}).obsPlaceholder || 'Alguma observação?', maxlength: '200' });
@@ -270,13 +290,14 @@ export function openProduct(item, onAdd) {
     return p;
   }
   function valido() {
-    if (item.tipo === 'simples') return true;
+    if (item.tipo === 'simples') return temTipos ? !!state.tipo : true;
     if (item.tipo === 'monte' || item.tipo === 'combo' || item.tipo === 'frape') return !!state.tamanhoId && state.bases.size >= 1;
     if (item.tipo === 'milkshake') return !!state.tamanhoId && state.sabores.size >= 1;
     if (item.tipo === 'sorvete') return totalBolas(state) >= 1;
     return !!state.tamanhoId;
   }
   function faltando() {
+    if (item.tipo === 'simples' && temTipos && !state.tipo) return 'Escolha o sabor';
     if (item.tipo === 'sorvete') return totalBolas(state) < 1 ? 'Escolha pelo menos 1 bola' : '';
     if (!state.tamanhoId && item.tipo !== 'simples') return 'Escolha o tamanho';
     if ((item.tipo === 'monte' || item.tipo === 'combo' || item.tipo === 'frape') && state.bases.size < 1) return 'Escolha pelo menos 1 base';
@@ -336,6 +357,7 @@ function buildLine(item, state, unit, temAcomp) {
   } else {
     // simples (salada/fondue com acomp, ou bebida/chocolate quente sem nada)
     titulo = item.nome;
+    if (state.tipo) blocos.push({ t: 'sec', nome: 'Sabor', itens: [`1x ${state.tipo}`] });
     blocos.push(...acompBlocos);
   }
   if (state.obs) blocos.push({ t: 'txt', txt: `Obs: ${state.obs}` });

@@ -8,6 +8,7 @@ import { el, money, toast } from './util.js';
 let _client = null, _store = '';
 let _host = null;
 let periodo = '7d';
+let customDe = null, customAte = null;
 
 export function renderDashboard(host, client, storeSlug) {
   _host = host; _client = client; _store = storeSlug;
@@ -23,6 +24,9 @@ const ymd = (d) => d.toISOString().slice(0, 10);
 function minusDays(base, n) { const x = new Date(base); x.setDate(x.getDate() - n); return ymd(x); }
 
 async function intervalo() {
+  if (periodo === 'custom' && customDe && customAte) {
+    return customDe <= customAte ? [customDe, customAte] : [customAte, customDe];
+  }
   let hoje = await rpc('today_local');
   hoje = Array.isArray(hoje) ? (hoje[0]?.today_local || hoje[0]) : hoje;          // scalar 'YYYY-MM-DD'
   if (!hoje) hoje = ymd(new Date());
@@ -38,15 +42,22 @@ async function intervalo() {
 function paint() {
   _host.innerHTML = '';
   // seletor de período
-  const presets = [['hoje', 'Hoje'], ['7d', '7 dias'], ['30d', '30 dias'], ['mes', 'Mês']];
+  const presets = [['hoje', 'Hoje'], ['7d', '7 dias'], ['30d', '30 dias'], ['mes', 'Mês'], ['custom', 'Personalizado']];
   _host.append(el('div', { class: 'pn-filters' }, presets.map(([id, label]) => {
     const b = el('button', { class: id === periodo ? 'active' : '', text: label });
     b.addEventListener('click', () => { periodo = id; paint(); });
     return b;
   })));
+  if (periodo === 'custom') {
+    const de = el('input', { type: 'date', class: 'crm-select', value: customDe || '' });
+    const ate = el('input', { type: 'date', class: 'crm-select', value: customAte || '' });
+    const aplicar = el('button', { class: 'btn btn-ghost mini', text: 'Aplicar', onclick: () => { if (!de.value || !ate.value) return toast('Escolha as duas datas'); customDe = de.value; customAte = ate.value; paint(); } });
+    _host.append(el('div', { class: 'crm-toolbar', style: 'margin-top:8px' }, [el('span', { class: 'hint', style: 'margin:0', text: 'De' }), de, el('span', { class: 'hint', style: 'margin:0', text: 'até' }), ate, aplicar]));
+  }
   const corpo = el('div', { id: 'dash-corpo' }, el('p', { class: 'hint', text: 'Carregando relatório...' }));
   _host.append(corpo);
-  load(corpo);
+  if (periodo === 'custom' && (!customDe || !customAte)) corpo.innerHTML = '<p class="hint" style="text-align:center;padding:20px">Escolha as datas e clique em Aplicar.</p>';
+  else load(corpo);
 }
 
 async function load(corpo) {

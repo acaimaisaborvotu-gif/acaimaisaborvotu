@@ -401,3 +401,12 @@ textarea.obs:focus { border-color: var(--magenta); }
 .rank-head b { white-space: nowrap; color: var(--magenta); }
 .rank-track { height: 7px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
 .rank-fill { height: 100%; background: var(--grad-marca); border-radius: 999px; }
+
+/* Editor de sabores das bebidas (painel) */
+.tipos-editor { margin: -2px 0 10px; padding: 8px 10px; background: var(--surface-2); border: 1px dashed var(--line); border-radius: 10px; }
+.tipos-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0; }
+.tipo-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px 4px 11px; border-radius: 999px; background: var(--surface); border: 1.5px solid var(--line); font-size: .85rem; font-weight: 700; color: var(--ink); }
+.tipo-chip .tipo-x { border: none; background: transparent; color: var(--ink-mute); cursor: pointer; font-size: .8rem; line-height: 1; padding: 2px; }
+.tipo-chip .tipo-x:hover { color: var(--magenta); }
+.tipos-add { display: flex; gap: 6px; margin-top: 4px; }
+.tipos-add .mi-edit { flex: 1; }

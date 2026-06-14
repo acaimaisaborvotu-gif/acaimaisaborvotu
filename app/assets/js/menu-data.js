@@ -263,12 +263,14 @@ export const SOBREMESAS = [
 ];
 
 // Bebidas (preço único)
+// `tipos` (opcional): sabores que o cliente escolhe ao adicionar, mesmo preço.
+// Edite/adicione/remova no painel. Os sabores abaixo são só exemplo.
 export const BEBIDAS = [
   { id: 'agua-c-gas', nome: 'Água com Gás', preco: 3.0 },
   { id: 'agua-s-gas', nome: 'Água sem Gás', preco: 3.0 },
-  { id: 'refri-lata', nome: 'Refrigerante Lata', preco: 5.5 },
-  { id: 'refri-600', nome: 'Refrigerante 600ml', preco: 8.0 },
-  { id: 'refri-2l', nome: 'Refrigerante 2L', preco: 17.5 },
+  { id: 'refri-lata', nome: 'Refrigerante Lata', preco: 5.5, tipos: ['Coca-Cola', 'Coca-Cola Zero', 'Guaraná Antarctica', 'Fanta Laranja', 'Sprite'] },
+  { id: 'refri-600', nome: 'Refrigerante 600ml', preco: 8.0, tipos: ['Coca-Cola', 'Coca-Cola Zero', 'Guaraná Antarctica', 'Fanta Laranja'] },
+  { id: 'refri-2l', nome: 'Refrigerante 2L', preco: 17.5, tipos: ['Coca-Cola', 'Guaraná Antarctica', 'Fanta Laranja'] },
 ];
 
 // Ordem e rótulos das categorias do cardápio público
@@ -307,6 +309,9 @@ export const TEXTOS = {
   turbineDesc: 'Opcional, soma ao preço',
   obsExemplo: 'Ex: sem granola, do seu jeito',
   obsPlaceholder: 'Alguma observação?',
+  // Mensagens do CRM (botão WhatsApp). {nome} = 1º nome do cliente, {loja} = nome da loja.
+  waInativo: 'Oi {nome}, sentimos sua falta aqui no {loja}! Bateu vontade de açaí? Manda um oi que a gente capricha no seu. 💜',
+  waAbandono: 'Oi {nome}, vi que você começou um pedido aqui no {loja} mas não finalizou. Posso fechar pra você agora se quiser? 🍧',
 };
 
 // Fotos iniciais (placeholder do seed; a loja troca pelo painel depois)

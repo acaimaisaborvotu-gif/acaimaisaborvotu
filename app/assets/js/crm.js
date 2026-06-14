@@ -4,22 +4,23 @@
 // =============================================================================
 import { el, money, toast } from './util.js';
 
-let _client = null, _store = '', _storeNome = '';
+let _client = null, _store = '', _storeNome = '', _templates = {};
 let _host = null;
 let aba = 'clientes';                 // 'clientes' | 'abandonos'
-const f = { sort: 'oldest', minDays: null, onlyNew: false, onlyAband: false, search: '', offset: 0 };
+const f = { sort: 'oldest', minDays: null, onlyNew: false, onlyAband: false, search: '', offset: 0, limit: 50 };
 const ab = { hours: 720, offset: 0 };  // janela dos abandonos
 
-// Mensagens prontas (editáveis no futuro). {nome} = 1º nome, {loja} = nome da loja.
-const TEMPLATES = {
+// Mensagens padrão (a loja edita no painel). {nome} = 1º nome, {loja} = nome da loja.
+const TEMPLATES_DEFAULT = {
   inativo: 'Oi {nome}, sentimos sua falta aqui no {loja}! Bateu vontade de açaí? Manda um oi que a gente capricha no seu. 💜',
   abandono: 'Oi {nome}, vi que você começou um pedido aqui no {loja} mas não finalizou. Ficou alguma dúvida? Posso fechar pra você agora se quiser. 🍧',
 };
-const fill = (t, nome) => t.replace(/\{nome\}/g, ((nome || '').trim().split(' ')[0]) || 'tudo bem?').replace(/\{loja\}/g, _storeNome || 'Açaí Mais Sabor');
+const template = (tipo) => (_templates && _templates[tipo === 'inativo' ? 'waInativo' : 'waAbandono']) || TEMPLATES_DEFAULT[tipo];
+const fill = (t, nome) => String(t || '').replace(/\{nome\}/g, ((nome || '').trim().split(' ')[0]) || 'tudo bem?').replace(/\{loja\}/g, _storeNome || 'Açaí Mais Sabor');
 const wa = (phone, msg) => `https://wa.me/${String(phone || '').replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`;
 
-export function renderClientes(host, client, storeSlug, storeNome) {
-  _host = host; _client = client; _store = storeSlug; _storeNome = storeNome || _storeNome;
+export function renderClientes(host, client, storeSlug, storeNome, templates) {
+  _host = host; _client = client; _store = storeSlug; _storeNome = storeNome || _storeNome; _templates = templates || {};
   paint();
 }
 
@@ -48,15 +49,20 @@ function paintClientes() {
 
   const reload = async () => {
     lista.innerHTML = ''; lista.append(el('p', { class: 'hint', text: 'Carregando...' }));
-    const rows = await rpc('crm_customers', { p_store: _store, p_search: f.search || null, p_only_abandoned: f.onlyAband, p_min_days: f.minDays, p_only_new: f.onlyNew, p_sort: f.sort, p_limit: 50, p_offset: f.offset });
+    const rows = await rpc('crm_customers', { p_store: _store, p_search: f.search || null, p_only_abandoned: f.onlyAband, p_min_days: f.minDays, p_only_new: f.onlyNew, p_sort: f.sort, p_limit: f.limit, p_offset: f.offset });
     lista.innerHTML = '';
-    if (!rows.length) { lista.append(vazio('Nenhum cliente nesse filtro.')); pager.innerHTML = ''; return; }
+    if (!rows.length) {
+      lista.append(vazio(f.offset > 0 ? 'Fim da lista.' : 'Nenhum cliente nesse filtro.'));
+      pager.innerHTML = '';
+      if (f.offset > 0) pager.append(el('button', { class: 'btn btn-ghost mini', text: '‹ Anterior', onclick: () => { f.offset = Math.max(0, f.offset - f.limit); reload(); } }));
+      return;
+    }
     rows.forEach((c) => lista.append(customerRow(c)));
     pager.innerHTML = '';
     pager.append(
-      el('button', { class: 'btn btn-ghost mini', text: '‹ Anterior', disabled: f.offset === 0, onclick: () => { f.offset = Math.max(0, f.offset - 50); reload(); } }),
+      el('button', { class: 'btn btn-ghost mini', text: '‹ Anterior', disabled: f.offset === 0, onclick: () => { f.offset = Math.max(0, f.offset - f.limit); reload(); } }),
       el('span', { class: 'hint', style: 'margin:0', text: `${f.offset + 1}–${f.offset + rows.length}` }),
-      el('button', { class: 'btn btn-ghost mini', text: 'Próximos ›', disabled: rows.length < 50, onclick: () => { f.offset += 50; reload(); } }),
+      el('button', { class: 'btn btn-ghost mini', text: 'Próximos ›', disabled: rows.length < f.limit, onclick: () => { f.offset += f.limit; reload(); } }),
     );
   };
 
@@ -81,7 +87,10 @@ function paintClientes() {
   };
   renderChips();
 
-  wrap.append(el('div', { class: 'crm-toolbar' }, [busca, ordenar]), chipsBar, lista, pager);
+  const qtd = el('select', { class: 'crm-select' });
+  [10, 20, 50, 100].forEach((n) => { const o = el('option', { value: n, text: n + ' por pág.' }); if (f.limit === n) o.selected = true; qtd.append(o); });
+  qtd.addEventListener('change', () => { f.limit = Number(qtd.value); f.offset = 0; reload(); });
+  wrap.append(el('div', { class: 'crm-toolbar' }, [busca, ordenar, qtd]), chipsBar, lista, pager);
   reload();
 }
 
@@ -102,7 +111,7 @@ function customerRow(c) {
       ]),
     ]),
     el('div', { class: 'crm-acoes' }, [
-      c.opt_out ? null : el('a', { class: 'btn btn-whats mini', href: wa(c.phone, fill(TEMPLATES.inativo, nome)), target: '_blank', rel: 'noopener', title: 'WhatsApp', html: '💬' }),
+      c.opt_out ? null : el('a', { class: 'btn btn-whats mini', href: wa(c.phone, fill(template('inativo'), nome)), target: '_blank', rel: 'noopener', title: 'WhatsApp', html: '💬' }),
       el('button', { class: 'btn btn-ghost mini', text: 'Ver', onclick: () => openDrawer(c) }),
     ]),
   ]);
@@ -124,7 +133,7 @@ async function openDrawer(c) {
 
   const ticket = c.orders_count ? c.total_spent / c.orders_count : 0;
   body.append(
-    el('a', { class: 'btn btn-whats btn-block', href: wa(c.phone, fill(TEMPLATES.inativo, c.name)), target: '_blank', rel: 'noopener', html: '💬 Mandar WhatsApp' }),
+    el('a', { class: 'btn btn-whats btn-block', href: wa(c.phone, fill(template('inativo'), c.name)), target: '_blank', rel: 'noopener', html: '💬 Mandar WhatsApp' }),
     el('div', { class: 'crm-badges', style: 'margin:12px 0' }, [
       el('span', { class: 'pill', text: `${c.orders_count} pedidos` }),
       el('span', { class: 'pill', text: 'Total ' + money(c.total_spent) }),
@@ -186,7 +195,7 @@ function abandonedRow(l) {
       el('small', { class: 'muted', style: 'display:block;margin-top:3px', text: '🛒 ' + carrinho }),
     ]),
     el('div', { class: 'crm-acoes' }, [
-      el('a', { class: 'btn btn-whats mini', href: wa(l.phone, fill(TEMPLATES.abandono, l.name)), target: '_blank', rel: 'noopener', title: 'WhatsApp', html: '💬' }),
+      el('a', { class: 'btn btn-whats mini', href: wa(l.phone, fill(template('abandono'), l.name)), target: '_blank', rel: 'noopener', title: 'WhatsApp', html: '💬' }),
     ]),
   ]);
 }
