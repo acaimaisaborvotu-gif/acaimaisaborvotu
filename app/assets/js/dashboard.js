@@ -62,10 +62,12 @@ function paint() {
 
 async function load(corpo) {
   const [de, ate] = await intervalo();
-  const [resumo, porDia, topItens] = await Promise.all([
+  const [resumo, porDia, topItens, topSizes, topAcomps] = await Promise.all([
     rpc('dashboard_summary', { p_store: _store, p_de: de, p_ate: ate }),
     rpc('dashboard_sales_by_day', { p_store: _store, p_de: de, p_ate: ate }),
     rpc('dashboard_top_items', { p_store: _store, p_de: de, p_ate: ate, p_limit: 10, p_order: 'qtd' }),
+    rpc('dashboard_top_sizes', { p_store: _store, p_de: de, p_ate: ate }),
+    rpc('dashboard_top_acomps', { p_store: _store, p_de: de, p_ate: ate, p_limit: 15 }),
   ]);
   corpo.innerHTML = '';
   const r = (Array.isArray(resumo) ? resumo[0] : resumo) || {};
@@ -113,6 +115,24 @@ async function load(corpo) {
   } else {
     corpo.append(card('Mais vendidos', el('p', { class: 'hint', text: 'Sem vendas no período.' })));
   }
+
+  // Etapa 5: vendas por tamanho de copo e acompanhamentos mais pedidos (pedidos novos)
+  corpo.append(rankCard('Tamanhos mais vendidos', (Array.isArray(topSizes) ? topSizes : []).map((r) => ({ label: r.tamanho, qtd: r.qtd }))));
+  corpo.append(rankCard('Acompanhamentos mais pedidos', (Array.isArray(topAcomps) ? topAcomps : []).map((r) => ({ label: r.nome, qtd: r.qtd }))));
+}
+
+// Ranking simples (label + barra) a partir de [{label, qtd}], reaproveita o estilo .rank
+function rankCard(titulo, rows) {
+  if (!rows.length) return card(titulo, el('p', { class: 'hint', text: 'Ainda sem dados. Conta a partir dos pedidos novos.' }));
+  const max = Math.max(1, ...rows.map((r) => Number(r.qtd) || 0));
+  const rank = el('div', { class: 'rank' }, rows.map((r, idx) => {
+    const q = Math.round(Number(r.qtd) || 0);
+    return el('div', { class: 'rank-item' }, [
+      el('div', { class: 'rank-head' }, [el('span', { text: `${idx + 1}. ${r.label || '(sem nome)'}` }), el('b', { text: `${q}x` })]),
+      el('div', { class: 'rank-track' }, el('div', { class: 'rank-fill', style: `width:${Math.round((Number(r.qtd) || 0) / max * 100)}%` })),
+    ]);
+  }));
+  return card(titulo, rank);
 }
 
 function kpi(label, valor, mod) {

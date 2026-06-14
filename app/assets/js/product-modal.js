@@ -321,9 +321,12 @@ export function openProduct(item, onAdd) {
 
 function buildLine(item, state, unit, temAcomp) {
   // acompanhamentos como seções "Grupo:" + "1x Item" (padrão da impressão)
-  const acompBlocos = acompGrouped(state).map((g) => ({ t: 'sec', nome: g.grupo, itens: g.itens.map((i) => `${i.qtd}x ${i.nome}`) }));
+  const grouped = acompGrouped(state);
+  const acompBlocos = grouped.map((g) => ({ t: 'sec', nome: g.grupo, itens: g.itens.map((i) => `${i.qtd}x ${i.nome}`) }));
+  const acomps = grouped.flatMap((g) => g.itens.map((i) => ({ nome: i.nome, qtd: i.qtd })));  // estruturado p/ relatório
   const blocos = [];          // lista ordenada: {t:'sec',nome,itens} ou {t:'txt',txt}
   let titulo = item.nome;
+  let tamanho = null;         // tamanho do copo/produto, p/ relatório (vendas por tamanho)
 
   if (item.tipo === 'monte') {
     const t = M.RECIPIENTES.flatMap((r) => r.tamanhos).find((x) => x.id === state.tamanhoId);
@@ -360,6 +363,7 @@ function buildLine(item, state, unit, temAcomp) {
     if (state.tipo) blocos.push({ t: 'sec', nome: 'Sabor', itens: [`1x ${state.tipo}`] });
     blocos.push(...acompBlocos);
   }
+  if (['monte', 'combo', 'frape', 'milkshake'].includes(item.tipo)) tamanho = titulo;
   if (state.obs) blocos.push({ t: 'txt', txt: `Obs: ${state.obs}` });
 
   // versão compacta em strings (sacola / checkout / WhatsApp)
@@ -367,7 +371,7 @@ function buildLine(item, state, unit, temAcomp) {
 
   return {
     tipo: item.tipo, refId: item.id, catId: item.catId, nome: titulo,
-    precoUnit: Number(unit.toFixed(2)), qtd: state.qtd,
+    precoUnit: Number(unit.toFixed(2)), qtd: state.qtd, tamanho, acomps,
     print: { titulo, blocos, detalhes }, obs: state.obs,
   };
 }
