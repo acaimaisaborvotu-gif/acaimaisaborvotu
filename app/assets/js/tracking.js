@@ -18,7 +18,7 @@ function push(event, ecommerce, extra = {}) {
 }
 
 const lineToGA = (l) => ({
-  item_id: l.refId, item_name: l.nome, item_category: l.catId || l.tipo,
+  item_id: l.refId, item_name: l.prodNome || l.nome, item_category: l.catId || l.tipo,
   price: Number(l.precoUnit?.toFixed?.(2) ?? l.precoUnit), quantity: l.qtd || 1,
 });
 

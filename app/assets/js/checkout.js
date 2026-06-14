@@ -24,6 +24,7 @@ export function openCheckout({ openOrders: ooInicial = 0 } = {}) {
   let openOrders = ooInicial;
   openOrdersCount().then((n) => { openOrders = n; }).catch(() => {});
   let leadEnviado = false; // captura de abandono dispara 1x por checkout
+  let paymentInfoEnviado = false; // add_payment_info dispara 1x por checkout (evita re-disparo em retry)
 
   let saved = {}; try { saved = JSON.parse(localStorage.getItem('ams_cliente') || '{}'); } catch (e) {}
   const state = {
@@ -84,7 +85,10 @@ export function openCheckout({ openOrders: ooInicial = 0 } = {}) {
       if (!leadEnviado) {
         leadEnviado = true;
         captureLead({ telefone: state.telefone, nome: state.nome, items: cart.getItems(), cartValue: cart.subtotal(), step: 1 });
-        track.generateLead(state.telefone, state.nome, 'checkout_step1');
+        // generate_lead 1x por telefone na sessao (nao re-dispara se fechar e reabrir o checkout)
+        const leadKey = 'ams_lead_' + state.telefone.replace(/\D/g, '');
+        let jaEnviou = false; try { jaEnviou = sessionStorage.getItem(leadKey) === '1'; } catch (e) {}
+        if (!jaEnviou) { track.generateLead(state.telefone, state.nome, 'checkout_step1'); try { sessionStorage.setItem(leadKey, '1'); } catch (e) {} }
       }
       // pre-salva nome+telefone (a versao completa e salva ao finalizar)
       try { const cur = JSON.parse(localStorage.getItem('ams_cliente') || '{}'); localStorage.setItem('ams_cliente', JSON.stringify({ ...cur, nome: state.nome, telefone: state.telefone })); } catch (e) {}
@@ -205,7 +209,7 @@ export function openCheckout({ openOrders: ooInicial = 0 } = {}) {
     setFoot(label, async () => {
       if (!aberto) return toast('Estamos fechados no momento');
       if (abaixoMin) return toast(`Pedido mínimo de ${money(min)}`);
-      track.addPaymentInfo(items, total(), state.metodo, state.cupom?.codigo);
+      if (!paymentInfoEnviado) { paymentInfoEnviado = true; track.addPaymentInfo(items, total(), state.metodo, state.cupom?.codigo); }
       await finalize();
     }, !aberto || abaixoMin);
   }
@@ -235,7 +239,8 @@ export function openCheckout({ openOrders: ooInicial = 0 } = {}) {
     try {
       const res = await submitOrder(order);
       order.id = res.id; order.numero = res.numero;
-      track.purchase(order);
+      // purchase so conta venda CONFIRMADA no backend (no fallback WhatsApp nao ha id estavel)
+      if (res.via === 'supabase' && res.id) track.purchase(order);
       // guarda o pedido no aparelho pra ele acompanhar o status no cardápio
       if (res.id) {
         try {

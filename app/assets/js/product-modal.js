@@ -370,7 +370,7 @@ function buildLine(item, state, unit, temAcomp) {
   const detalhes = blocos.map((b) => b.t === 'sec' ? `${b.nome}: ${b.itens.join(', ')}` : b.txt);
 
   return {
-    tipo: item.tipo, refId: item.id, catId: item.catId, nome: titulo,
+    tipo: item.tipo, refId: item.id, catId: item.catId, nome: titulo, prodNome: item.nome,
     precoUnit: Number(unit.toFixed(2)), qtd: state.qtd, tamanho, acomps,
     print: { titulo, blocos, detalhes }, obs: state.obs,
   };
