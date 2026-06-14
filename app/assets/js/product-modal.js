@@ -108,7 +108,7 @@ function sizePicker(recipientes, state, recompute) {
 // Grupo de Base (req+). Açaí em primeiro, mas NADA pré-marcado.
 function baseGroup(state) {
   const gb = el('div', { class: 'opt-group' });
-  gb.append(groupHead('Base', 'Escolha pelo menos 1. Pode trocar o Açaí ou combinar mais de uma base.', 'req+'));
+  gb.append(groupHead('Base', (M.textos || {}).baseDesc || 'Escolha pelo menos 1. Pode trocar o Açaí ou combinar mais de uma base.', 'req+'));
   M.BASES.forEach((b) => {
     const mark = el('span', { class: 'mark sq', html: state.bases.has(b.id) ? '&#10003;' : '' });
     const row = el('div', { class: 'opt' + (state.bases.has(b.id) ? ' sel' : '') }, [
@@ -189,7 +189,7 @@ export function openProduct(item, onAdd) {
     body.append(g1);
     body.append(baseGroup(state));
     const extras = el('div', { class: 'opt-group' });
-    extras.append(groupHead('Turbine com acompanhamentos', 'Opcional, soma ao preço', 'opt'));
+    extras.append(groupHead('Turbine com acompanhamentos', (M.textos || {}).turbineDesc || 'Opcional, soma ao preço', 'opt'));
     body.append(extras);
     acompGroupsOrdered().forEach((g) => body.append(acompGroup(g, state)));
   } else if (item.tipo === 'frape') {
@@ -221,20 +221,20 @@ export function openProduct(item, onAdd) {
     gs.prepend(groupHead('Bolas de sorvete', `1 bola já inclusa. Cada bola a mais: + ${money(extra)}`, 'req+'));
     body.append(gs);
     const extras = el('div', { class: 'opt-group' });
-    extras.append(groupHead('Turbine com acompanhamentos', 'Opcional, soma ao preço', 'opt'));
+    extras.append(groupHead('Turbine com acompanhamentos', (M.textos || {}).turbineDesc || 'Opcional, soma ao preço', 'opt'));
     body.append(extras);
     acompGroupsOrdered().filter((g) => g.id !== 'sorvetes').forEach((g) => body.append(acompGroup(g, state)));
   } else if (temAcomp) {
     // Salada de frutas, Fondue: produto com preço base + acompanhamentos opcionais (sem base/tamanho)
     const extras = el('div', { class: 'opt-group' });
-    extras.append(groupHead('Adicione acompanhamentos', 'Opcional, soma ao preço', 'opt'));
+    extras.append(groupHead('Adicione acompanhamentos', (M.textos || {}).turbineDesc || 'Opcional, soma ao preço', 'opt'));
     body.append(extras);
     acompGroupsOrdered().forEach((g) => body.append(acompGroup(g, state)));
   }
 
   const gobs = el('div', { class: 'opt-group' });
-  gobs.append(groupHead('Observação', 'Ex: sem granola, capricha na fruta', 'opt'));
-  const ta = el('textarea', { class: 'obs', placeholder: 'Alguma observação?', maxlength: '200' });
+  gobs.append(groupHead('Observação', (M.textos || {}).obsExemplo || 'Ex: sem granola', 'opt'));
+  const ta = el('textarea', { class: 'obs', placeholder: (M.textos || {}).obsPlaceholder || 'Alguma observação?', maxlength: '200' });
   ta.addEventListener('input', () => { state.obs = ta.value.trim(); });
   gobs.append(ta); body.append(gobs);
 

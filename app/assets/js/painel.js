@@ -9,6 +9,8 @@ import { sb } from './data.js';
 import { printer } from './printing.js';
 import * as SEED from './menu-data.js';
 import { el, money, toast, escapeHtml } from './util.js';
+import { renderClientes } from './crm.js';
+import { renderDashboard } from './dashboard.js';
 
 const app = document.getElementById('app');
 const STORE_SLUG = CONFIG.STORE_ID;
@@ -165,7 +167,7 @@ async function logout() { await client.auth.signOut(); location.reload(); }
 function renderApp() {
   app.innerHTML = '';
   const isOwner = profile.role === 'owner';
-  const tabs = [['pedidos', 'Pedidos'], ['cardapio', 'Cardápio'], isOwner ? ['config', 'Configurações'] : null, ['impressora', 'Impressora']].filter(Boolean);
+  const tabs = [['pedidos', 'Pedidos'], isOwner ? ['clientes', 'Clientes'] : null, isOwner ? ['dashboard', 'Dashboard'] : null, ['cardapio', 'Cardápio'], isOwner ? ['config', 'Configurações'] : null, ['impressora', 'Impressora']].filter(Boolean);
   const tabNav = el('div', { class: 'pn-tabs' }, tabs.map(([id, label]) => {
     const b = el('button', { class: id === tab ? 'active' : '', 'data-tab': id, text: label });
     if (id === 'pedidos') { const n = orders.filter((o) => o.status === 'novo').length; if (n) b.append(el('span', { class: 'badge', text: n })); }
@@ -181,7 +183,12 @@ function renderApp() {
     tabNav,
     el('div', { class: 'pn-main', id: 'tabContent' }),
   );
-  ({ pedidos: renderOrders, cardapio: renderCardapio, config: renderConfig, impressora: renderImpressora }[tab])();
+  ({
+    pedidos: renderOrders,
+    clientes: () => renderClientes(document.getElementById('tabContent'), client, STORE_SLUG, store.nome),
+    dashboard: () => renderDashboard(document.getElementById('tabContent'), client, STORE_SLUG),
+    cardapio: renderCardapio, config: renderConfig, impressora: renderImpressora,
+  }[tab])();
 }
 
 // ---------------------------------------------------------------- Pedidos
@@ -279,7 +286,7 @@ function alertNew() {
 // ---------------------------------------------------------------- Cardápio (editor)
 function currentMenu() { return cfg.menu || seedMenu(); }
 function seedMenu() {
-  return { RECIPIENTES: SEED.RECIPIENTES, BASES: SEED.BASES, ACOMPANHAMENTOS: SEED.ACOMPANHAMENTOS, COMBOS: SEED.COMBOS, DESTAQUES: SEED.DESTAQUES, FRAPE: SEED.FRAPE, MILKSHAKE: SEED.MILKSHAKE, SALADAS: SEED.SALADAS, SOBREMESAS: SEED.SOBREMESAS, BEBIDAS: SEED.BEBIDAS, CATEGORIAS: SEED.CATEGORIAS, FOTOS_SEED: { ...SEED.FOTOS_SEED }, categoriaFotos: { ...SEED.CATEGORIA_FOTOS }, esgotados: [], secao2: { ...SEED.SECAO2, itens: [] }, upsell: { ...SEED.UPSELL, itens: [] }, cupons: [...(SEED.CUPONS || [])], removidos: [] };
+  return { RECIPIENTES: SEED.RECIPIENTES, BASES: SEED.BASES, ACOMPANHAMENTOS: SEED.ACOMPANHAMENTOS, COMBOS: SEED.COMBOS, DESTAQUES: SEED.DESTAQUES, FRAPE: SEED.FRAPE, MILKSHAKE: SEED.MILKSHAKE, SALADAS: SEED.SALADAS, SOBREMESAS: SEED.SOBREMESAS, BEBIDAS: SEED.BEBIDAS, CATEGORIAS: SEED.CATEGORIAS, FOTOS_SEED: { ...SEED.FOTOS_SEED }, categoriaFotos: { ...SEED.CATEGORIA_FOTOS }, esgotados: [], secao2: { ...SEED.SECAO2, itens: [] }, upsell: { ...SEED.UPSELL, itens: [] }, cupons: [...(SEED.CUPONS || [])], textos: { ...SEED.TEXTOS }, removidos: [] };
 }
 // Aplica a estrutura nova do código preservando o que a loja já editou
 // (fotos, esgotados, destaques, seções E PREÇOS alterados no painel)
@@ -302,6 +309,7 @@ function mergedSeed() {
     if (old.secao2) seed.secao2 = old.secao2;
     if (old.upsell) seed.upsell = old.upsell;
     if (old.cupons) seed.cupons = old.cupons;
+    if (old.textos) seed.textos = { ...seed.textos, ...old.textos };
     // preserva preços editados (casa por id; itens removidos do seed somem naturalmente)
     const priceMap = {};
     (old.RECIPIENTES || []).forEach((r) => (r.tamanhos || []).forEach((t) => priceMap[t.id] = t.preco));
@@ -559,6 +567,20 @@ function renderCardapio() {
   [['FRAPE', 'Frapê'], ['MILKSHAKE', 'Milk Shake']].forEach(([k]) => espNomeCard.append(menuRow({ id: k, nome: menu[k].nome, sub: menu[k].desc, onName: (v) => { menu[k].nome = v; }, onDesc: (v) => { menu[k].desc = v; }, noStar: true, simple: true })));
   espNomeCard.append(saveBtn(menu));
   host.append(espNomeCard);
+
+  // Textos e exemplos que aparecem nos modais do cliente
+  menu.textos = menu.textos || {};
+  const txtCard = el('div', { class: 'panel-card' }, [el('h3', { text: 'Textos do cardápio' }), el('p', { class: 'hint', text: 'As mensagens e exemplos que o cliente vê nos modais. Edite do jeito que preferir.' })]);
+  const txtRow = (label, key, ph) => { const i = el('input', { type: 'text', value: menu.textos[key] || '', placeholder: ph || '', style: 'width:100%;text-align:left' }); i.addEventListener('input', () => menu.textos[key] = i.value); return el('div', { class: 'frow', style: 'flex-direction:column;align-items:stretch;gap:4px' }, [el('label', { text: label }), i]); };
+  txtCard.append(
+    txtRow('Embaixo do "Monte Seu Açaí"', 'monteDesc', SEED.TEXTOS.monteDesc),
+    txtRow('Embaixo de "Base"', 'baseDesc', SEED.TEXTOS.baseDesc),
+    txtRow('Embaixo de "Turbine / Adicione acompanhamentos"', 'turbineDesc', SEED.TEXTOS.turbineDesc),
+    txtRow('Exemplo embaixo de "Observação"', 'obsExemplo', SEED.TEXTOS.obsExemplo),
+    txtRow('Texto cinza dentro do campo de observação', 'obsPlaceholder', SEED.TEXTOS.obsPlaceholder),
+    saveBtn(menu),
+  );
+  host.append(txtCard);
 
   // Simples (saladas, diversos, bebidas): nome, descrição, preço, foto, adicionar/remover
   [['SALADAS', 'Saladas'], ['SOBREMESAS', 'Diversos'], ['BEBIDAS', 'Bebidas']].forEach(([k, label]) => {

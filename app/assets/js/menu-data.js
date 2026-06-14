@@ -300,6 +300,15 @@ export const UPSELL = { ativo: false, titulo: 'Que tal adicionar?', itens: [] };
 // item: { codigo, tipo:'percent'|'fixo', valor, minimo, ativo }
 export const CUPONS = [];
 
+// Textos/exemplos do cardápio que aparecem nos modais (a loja edita no painel).
+export const TEXTOS = {
+  monteDesc: 'Escolha o recipiente, o tamanho, a base e os acompanhamentos do seu jeito',
+  baseDesc: 'Escolha pelo menos 1. Pode trocar o Açaí ou combinar mais de uma base.',
+  turbineDesc: 'Opcional, soma ao preço',
+  obsExemplo: 'Ex: sem granola, do seu jeito',
+  obsPlaceholder: 'Alguma observação?',
+};
+
 // Fotos iniciais (placeholder do seed; a loja troca pelo painel depois)
 export const FOTOS_SEED = {
   'salada-verao': 'assets/img/seed/salada-frutas.png',

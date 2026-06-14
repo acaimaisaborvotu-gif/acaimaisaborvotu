@@ -20,7 +20,7 @@ const SEED_MENU = () => ({
   COMBOS: SEED.COMBOS, DESTAQUES: SEED.DESTAQUES, FRAPE: SEED.FRAPE, MILKSHAKE: SEED.MILKSHAKE,
   SALADAS: SEED.SALADAS, SOBREMESAS: SEED.SOBREMESAS, BEBIDAS: SEED.BEBIDAS,
   CATEGORIAS: SEED.CATEGORIAS, FOTOS_SEED: SEED.FOTOS_SEED, categoriaFotos: SEED.CATEGORIA_FOTOS, esgotados: [],
-  secao2: SEED.SECAO2, upsell: SEED.UPSELL, cupons: SEED.CUPONS,
+  secao2: SEED.SECAO2, upsell: SEED.UPSELL, cupons: SEED.CUPONS, textos: SEED.TEXTOS,
 });
 
 // Catálogo corrente (hidratado ou seed). Os modais leem daqui.
@@ -142,7 +142,7 @@ export function buildCatalog() {
     } else if (cat.id === 'monte') {
       items = [{
         id: 'monte', nome: 'Monte Seu Açaí', tipo: 'monte', catId: cat.id,
-        desc: 'Escolha o recipiente, o tamanho, a base e os acompanhamentos do seu jeito',
+        desc: (src.textos || {}).monteDesc || 'Escolha o recipiente, o tamanho, a base e os acompanhamentos do seu jeito',
         foto: fotos.monte || null, precoFrom: recipMin(), raw: null,
       }];
     } else if (cat.id === 'frapes') {

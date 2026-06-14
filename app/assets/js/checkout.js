@@ -30,7 +30,7 @@ export function openCheckout({ openOrders: ooInicial = 0 } = {}) {
     step: 1, nome: saved.nome || '', telefone: saved.telefone || '',
     tipo: 'entrega', rua: saved.rua || '', numero: saved.numero || '', bairro: saved.bairro || '',
     complemento: saved.complemento || '', referencia: saved.referencia || '', obs: '',
-    metodo: settings.pagamentos[0], trocoPara: '', cupom: null,
+    metodo: (saved.metodo && settings.pagamentos.includes(saved.metodo)) ? saved.metodo : settings.pagamentos[0], trocoPara: '', cupom: null,
   };
   const sub = cart.subtotal();
   const taxa = () => (state.tipo === 'entrega' ? settings.taxaEntrega : 0);
@@ -231,7 +231,7 @@ export function openCheckout({ openOrders: ooInicial = 0 } = {}) {
     };
     order.whatsappText = buildWhatsApp(order, store);
     // salva os dados do cliente no aparelho pra próxima vez
-    try { localStorage.setItem('ams_cliente', JSON.stringify({ nome: state.nome.trim(), telefone: state.telefone.trim(), rua: state.rua.trim(), numero: state.numero.trim(), bairro: state.bairro.trim(), complemento: state.complemento.trim(), referencia: state.referencia.trim() })); } catch (e) {}
+    try { localStorage.setItem('ams_cliente', JSON.stringify({ nome: state.nome.trim(), telefone: state.telefone.trim(), rua: state.rua.trim(), numero: state.numero.trim(), bairro: state.bairro.trim(), complemento: state.complemento.trim(), referencia: state.referencia.trim(), metodo: state.metodo })); } catch (e) {}
     try {
       const res = await submitOrder(order);
       order.id = res.id; order.numero = res.numero;
