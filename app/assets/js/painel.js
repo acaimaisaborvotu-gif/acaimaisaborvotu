@@ -167,7 +167,7 @@ async function logout() { await client.auth.signOut(); location.reload(); }
 function renderApp() {
   app.innerHTML = '';
   const isOwner = profile.role === 'owner';
-  const tabs = [['pedidos', 'Pedidos'], ['clientes', 'Clientes'], isOwner ? ['dashboard', 'Dashboard'] : null, ['cardapio', 'Cardápio'], isOwner ? ['config', 'Configurações'] : null, ['impressora', 'Impressora']].filter(Boolean);
+  const tabs = [['pedidos', 'Pedidos'], ['clientes', 'Clientes'], isOwner ? ['dashboard', 'Dashboard'] : null, ['cardapio', 'Cardápio'], isOwner ? ['config', 'Configurações'] : null, isOwner ? ['acessos', 'Acessos'] : null, ['impressora', 'Impressora']].filter(Boolean);
   const tabNav = el('div', { class: 'pn-tabs' }, tabs.map(([id, label]) => {
     const b = el('button', { class: id === tab ? 'active' : '', 'data-tab': id, text: label });
     if (id === 'pedidos') { const n = orders.filter((o) => o.status === 'novo').length; if (n) b.append(el('span', { class: 'badge', text: n })); }
@@ -187,7 +187,7 @@ function renderApp() {
     pedidos: renderOrders,
     clientes: () => renderClientes(document.getElementById('tabContent'), client, STORE_SLUG, store.nome, (currentMenu() || {}).textos),
     dashboard: () => renderDashboard(document.getElementById('tabContent'), client, STORE_SLUG),
-    cardapio: renderCardapio, config: renderConfig, impressora: renderImpressora,
+    cardapio: renderCardapio, config: renderConfig, acessos: renderAcessos, impressora: renderImpressora,
   }[tab])();
 }
 
@@ -419,10 +419,11 @@ function renderCardapio() {
   const msInput = el('input', { type: 'number', step: '0.50', value: Number(menu.MILKSHAKE.precoSaborExtra ?? 5).toFixed(2), style: 'width:100px;text-align:right' });
   msInput.addEventListener('input', () => menu.MILKSHAKE.precoSaborExtra = parseFloat(msInput.value) || 0);
   valCard.append(el('div', { class: 'frow' }, [el('label', { text: 'Milk Shake: cada sabor a mais (R$)' }), msInput]));
-  const petit = (menu.SOBREMESAS || []).filter((s) => s.sorvete);
-  const pbInput = el('input', { type: 'number', step: '0.50', value: Number(petit[0]?.precoBolaExtra ?? 3.5).toFixed(2), style: 'width:100px;text-align:right' });
-  pbInput.addEventListener('input', () => { const v = parseFloat(pbInput.value) || 0; petit.forEach((s) => s.precoBolaExtra = v); });
-  valCard.append(el('div', { class: 'frow' }, [el('label', { text: 'Petit Gateau / Brownie: cada bola a mais (R$)' }), pbInput]));
+  (menu.SOBREMESAS || []).filter((s) => s.sorvete).forEach((s) => {
+    const inp = el('input', { type: 'number', step: '0.50', value: Number(s.precoBolaExtra ?? 3.5).toFixed(2), style: 'width:100px;text-align:right' });
+    inp.addEventListener('input', () => { s.precoBolaExtra = parseFloat(inp.value) || 0; });
+    valCard.append(el('div', { class: 'frow' }, [el('label', { text: s.nome + ': cada bola a mais (R$)' }), inp]));
+  });
   valCard.append(saveBtn(menu));
   host.append(valCard);
 
@@ -603,6 +604,7 @@ function renderCardapio() {
     txtRow('Embaixo de "Base"', 'baseDesc', SEED.TEXTOS.baseDesc),
     txtRow('Embaixo de "Turbine / Adicione acompanhamentos"', 'turbineDesc', SEED.TEXTOS.turbineDesc),
     txtRow('Embaixo de "Sabores" (Milk Shake) — use {valor} pro preço do sabor extra', 'msSaboresDesc', SEED.TEXTOS.msSaboresDesc),
+    txtRow('Embaixo de "Bolas de sorvete" (Petit/Brownie) — use {valor} pro preço da bola extra', 'bolasDesc', SEED.TEXTOS.bolasDesc),
     txtRow('Exemplo embaixo de "Observação"', 'obsExemplo', SEED.TEXTOS.obsExemplo),
     txtRow('Texto cinza dentro do campo de observação', 'obsPlaceholder', SEED.TEXTOS.obsPlaceholder),
     saveBtn(menu),
@@ -784,6 +786,84 @@ function renderConfig() {
   } });
 
   host.append(ops, pays, hours, save);
+}
+
+// ---------------------------------------------------------------- Acessos (logins do painel)
+// Chama a Edge Function "manage-users" (a chave de admin fica só no servidor).
+async function callManageUsers(body) {
+  const { data, error } = await client.functions.invoke('manage-users', { body });
+  if (error) {
+    let msg = error.message || 'Erro ao falar com o servidor';
+    try { const ctx = await error.context?.json?.(); if (ctx?.error) msg = ctx.error; } catch (e) {}
+    throw new Error(msg);
+  }
+  if (data && data.error) throw new Error(data.error);
+  return data || {};
+}
+
+function renderAcessos() {
+  const host = document.getElementById('tabContent'); host.innerHTML = '';
+  const listCard = el('div', { class: 'panel-card' }, [
+    el('h3', { text: 'Acessos ao painel' }),
+    el('p', { class: 'hint', text: 'Quem pode entrar no painel. "Operação" não vê Dashboard nem Configurações. Você não pode excluir o próprio acesso.' }),
+  ]);
+  const listBox = el('div', {}, el('p', { class: 'hint', text: 'Carregando...' }));
+  listCard.append(listBox);
+  host.append(listCard);
+
+  async function load() {
+    listBox.innerHTML = '';
+    try {
+      const { users } = await callManageUsers({ action: 'list' });
+      if (!users || !users.length) { listBox.append(el('p', { class: 'hint', text: 'Nenhum acesso ainda.' })); return; }
+      users.forEach((u) => {
+        const tag = el('span', { class: 'pill', text: u.role === 'owner' ? 'Dono' : 'Operação' });
+        const acao = u.self
+          ? el('span', { class: 'hint', style: 'margin:0', text: '(você)' })
+          : el('button', { class: 'btn btn-ghost mini', title: 'Excluir acesso', text: '✕', onclick: async (e) => {
+              if (!confirm(`Excluir o acesso de ${u.nome || u.email}? A pessoa não vai mais conseguir entrar.`)) return;
+              e.target.disabled = true;
+              try { await callManageUsers({ action: 'delete', id: u.id }); toast('Acesso excluído'); load(); }
+              catch (err) { toast(err.message); e.target.disabled = false; }
+            } });
+        listBox.append(el('div', { class: 'menu-item' }, [
+          el('div', { class: 'mi-name' }, [el('span', { text: u.nome || '(sem nome)' }), el('small', { text: u.email })]),
+          tag, acao,
+        ]));
+      });
+    } catch (err) {
+      listBox.append(el('div', { class: 'notice', html: `<p>${escapeHtml(err.message)}</p><p class="hint" style="margin-top:6px">Se aparecer erro de função não encontrada, falta publicar a Edge Function <code>manage-users</code> no Supabase.</p>` }));
+    }
+  }
+  load();
+
+  // ---- Criar novo acesso ----
+  const nome = el('input', { type: 'text', placeholder: 'Ex: Maria', style: 'width:100%;text-align:left' });
+  const email = el('input', { type: 'email', placeholder: 'email@exemplo.com', autocomplete: 'off', style: 'width:100%;text-align:left' });
+  const senha = el('input', { type: 'text', placeholder: 'mínimo 6 caracteres', autocomplete: 'new-password', style: 'width:100%;text-align:left' });
+  const cargo = el('select', { style: 'border:1.5px solid var(--line);border-radius:10px;padding:9px' }, [
+    el('option', { value: 'operator', text: 'Operação (sem financeiro)' }),
+    el('option', { value: 'owner', text: 'Dono (acesso total)' }),
+  ]);
+  const criar = el('button', { class: 'btn btn-primary', text: 'Criar acesso' });
+  criar.addEventListener('click', async () => {
+    if (!nome.value.trim() || !email.value.trim() || senha.value.length < 6) return toast('Preencha nome, e-mail e senha (mín. 6).');
+    criar.disabled = true; criar.textContent = 'Criando...';
+    try {
+      await callManageUsers({ action: 'create', nome: nome.value.trim(), email: email.value.trim(), password: senha.value, role: cargo.value });
+      toast('Acesso criado! Já pode entrar com esse e-mail e senha.');
+      nome.value = ''; email.value = ''; senha.value = ''; load();
+    } catch (err) { toast(err.message); }
+    criar.disabled = false; criar.textContent = 'Criar acesso';
+  });
+  const frow = (label, inp) => el('div', { class: 'frow', style: 'flex-direction:column;align-items:stretch;gap:4px' }, [el('label', { text: label }), inp]);
+  host.append(el('div', { class: 'panel-card' }, [
+    el('h3', { text: 'Criar novo acesso' }),
+    el('p', { class: 'hint', text: 'A pessoa entra no painel com o e-mail e a senha que você definir aqui. Anote e passe pra ela.' }),
+    frow('Nome', nome), frow('E-mail de acesso', email), frow('Senha', senha),
+    el('div', { class: 'frow' }, [el('label', { text: 'Cargo' }), cargo]),
+    criar,
+  ]));
 }
 
 // ---------------------------------------------------------------- Impressora

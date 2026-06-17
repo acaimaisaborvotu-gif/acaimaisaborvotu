@@ -221,7 +221,8 @@ export function openProduct(item, onAdd) {
     const sorveteGroup = M.ACOMPANHAMENTOS.find((g) => g.id === 'sorvetes');
     const extra = item.raw.precoBolaExtra ?? 3.5;
     const gs = bolasGroup(sorveteGroup || { itens: [] }, state);
-    gs.prepend(groupHead('Bolas de sorvete', `1 bola já inclusa. Cada bola a mais: + ${money(extra)}`, 'req+'));
+    const bolasSub = ((M.textos || {}).bolasDesc || '1 bola já inclusa. Cada bola a mais: + {valor}').replace('{valor}', money(extra));
+    gs.prepend(groupHead('Bolas de sorvete', bolasSub, 'req+'));
     body.append(gs);
     const extras = el('div', { class: 'opt-group' });
     extras.append(groupHead('Turbine com acompanhamentos', (M.textos || {}).turbineDesc || 'Opcional, soma ao preço', 'opt'));
