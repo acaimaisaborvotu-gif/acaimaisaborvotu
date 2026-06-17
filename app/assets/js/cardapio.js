@@ -2,7 +2,7 @@
 // CARDÁPIO PÚBLICO — controlador principal
 // =============================================================================
 
-import { el, money, toast, maskPhone, phoneValido } from './util.js';
+import { el, money, toast, maskPhone, phoneValido, imgUrl } from './util.js';
 import * as cart from './cart.js';
 import { getStore, getSettings, isOpenNow, nextOpenLabel, buildCatalog, hydrate, secao2, upsellItems, orderStatus, customerLogin, customerOrders } from './data.js';
 import { openProduct } from './product-modal.js';
@@ -90,7 +90,14 @@ function catNav() {
 }
 
 function thumb(item, big) {
-  if (item.foto) return el('img', { class: big ? 'ph' : 'thumb', src: item.foto, alt: item.nome, loading: 'lazy', onerror: function () { const ph = el('div', { class: (big ? 'ph' : 'thumb') + ' ph' }, el('span', { text: item.emoji })); this.replaceWith(ph); } });
+  if (item.foto) return el('img', {
+    class: big ? 'ph' : 'thumb', src: imgUrl(item.foto, big ? 640 : 400, big ? 74 : 72),
+    alt: item.nome, loading: 'lazy', decoding: 'async',
+    onerror: function () {
+      if (this.dataset.orig) this.replaceWith(el('div', { class: (big ? 'ph' : 'thumb') + ' ph' }, el('span', { text: item.emoji })));
+      else { this.dataset.orig = '1'; this.src = item.foto; }  // transformação falhou -> tenta o original
+    },
+  });
   return el('div', { class: (big ? 'ph' : 'thumb') + ' ph' }, el('span', { text: item.emoji }));
 }
 
@@ -117,7 +124,7 @@ function card(item) {
 function monteCard(item) {
   const c = el('div', { class: 'card', style: 'background:var(--grad-acai);color:#fff;border:none' }, [
     item.foto
-      ? el('img', { class: 'thumb', src: item.foto, alt: item.nome, loading: 'lazy', onerror: function () { this.replaceWith(el('div', { class: 'thumb ph', style: 'background:rgba(255,255,255,.15)' }, el('span', { text: '🍨' }))); } })
+      ? el('img', { class: 'thumb', src: imgUrl(item.foto, 400, 72), alt: item.nome, loading: 'lazy', decoding: 'async', onerror: function () { if (this.dataset.orig) this.replaceWith(el('div', { class: 'thumb ph', style: 'background:rgba(255,255,255,.15)' }, el('span', { text: '🍨' }))); else { this.dataset.orig = '1'; this.src = item.foto; } } })
       : el('div', { class: 'thumb ph', style: 'background:rgba(255,255,255,.15)' }, el('span', { text: '🍨' })),
     el('div', { class: 'body' }, [
       el('h3', { style: 'color:#fff', text: item.nome }),
@@ -156,7 +163,7 @@ function categoriasTiles() {
   const cats = catalog.filter((c) => c.id !== 'destaques' && c.items.length);
   const row = el('div', { class: 'cats-row' }, cats.map((c) => {
     const img = c.foto
-      ? el('img', { class: 'ct-img', src: c.foto, alt: c.nome, loading: 'lazy', onerror: function () { this.replaceWith(el('div', { class: 'ct-img ph' }, el('span', { text: EMOJI_CAT[c.id] || '🍧' }))); } })
+      ? el('img', { class: 'ct-img', src: imgUrl(c.foto, 360, 74), alt: c.nome, loading: 'lazy', decoding: 'async', onerror: function () { if (this.dataset.orig) this.replaceWith(el('div', { class: 'ct-img ph' }, el('span', { text: EMOJI_CAT[c.id] || '🍧' }))); else { this.dataset.orig = '1'; this.src = c.foto; } } })
       : el('div', { class: 'ct-img ph' }, el('span', { text: EMOJI_CAT[c.id] || '🍧' }));
     const tile = el('button', { class: 'cat-tile' }, [img, el('span', { class: 'ct-name', text: c.nome })]);
     tile.addEventListener('click', () => document.getElementById('sec-' + c.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
@@ -268,7 +275,7 @@ function openCart() {
           paint();
         });
         upBox.append(el('div', { class: 'opt' }, [
-          u.foto ? el('img', { src: u.foto, alt: u.nome, style: 'width:46px;height:46px;border-radius:10px;object-fit:cover;flex:none' }) : null,
+          u.foto ? el('img', { src: imgUrl(u.foto, 120, 72), alt: u.nome, loading: 'lazy', decoding: 'async', style: 'width:46px;height:46px;border-radius:10px;object-fit:cover;flex:none', onerror: function () { if (this.dataset.orig) this.style.display = 'none'; else { this.dataset.orig = '1'; this.src = u.foto; } } }) : null,
           el('span', { class: 'oname', text: u.nome }), add,
         ]));
       });

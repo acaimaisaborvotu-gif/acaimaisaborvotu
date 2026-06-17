@@ -33,6 +33,24 @@ export function toast(msg) {
   toastTimer = setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 250); }, 2200);
 }
 
+// Foto do Supabase Storage -> versão redimensionada pela CDN (bem mais leve).
+// O navegador recebe WebP automático (header Accept), então fica minúsculo.
+// O ORIGINAL fica intacto no banco (não há reupload). URLs que não são do
+// Storage (ex: assets locais) passam direto.
+// IMPORTANTE: passa width E height iguais com resize=contain. Só `width` faria
+// o Supabase cortar pra width x altura-original (deformava/cortava a foto). Com
+// resize=contain a foto é só reduzida MANTENDO a proporção (sem corte nem
+// distorção); o recorte de exibição fica por conta do object-fit do CSS.
+// `box` = caixa máxima (px) em que a foto cabe; quality 1-100.
+export function imgUrl(url, box, quality = 72) {
+  if (!url || typeof url !== 'string') return url;
+  const marker = '/storage/v1/object/public/';
+  const i = url.indexOf(marker);
+  if (i < 0) return url;
+  const rendered = url.slice(0, i) + '/storage/v1/render/image/public/' + url.slice(i + marker.length);
+  return rendered + (rendered.includes('?') ? '&' : '?') + 'width=' + box + '&height=' + box + '&resize=contain&quality=' + quality;
+}
+
 // "HH:MM" -> minutos
 export const hmToMin = (hm) => { const [h, m] = String(hm).split(':').map(Number); return h * 60 + m; };
 export const uid = () => Math.random().toString(36).slice(2, 9);

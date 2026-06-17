@@ -4,7 +4,7 @@
 // Lê o cardápio corrente (hidratado do painel/Supabase ou seed) via menu().
 // =============================================================================
 
-import { el, money } from './util.js';
+import { el, money, imgUrl } from './util.js';
 import { menu } from './data.js';
 
 let M;                                   // catálogo corrente (setado ao abrir)
@@ -39,7 +39,7 @@ function overlayShell(item) {
   const overlay = el('div', { class: 'overlay' });
   const sheet = el('div', { class: 'sheet' });
   const hero = el('div', { class: 'sheet-hero' },
-    item.foto ? el('img', { src: item.foto, alt: item.nome, onerror: function () { this.replaceWith(el('span', { class: 'emoji', text: item.emoji || '🍧' })); } })
+    item.foto ? el('img', { src: imgUrl(item.foto, 900, 78), alt: item.nome, decoding: 'async', onerror: function () { if (this.dataset.orig) this.replaceWith(el('span', { class: 'emoji', text: item.emoji || '🍧' })); else { this.dataset.orig = '1'; this.src = item.foto; } } })
               : el('span', { class: 'emoji', text: item.emoji || '🍧' }));
   const close = el('button', { class: 'close', 'aria-label': 'Fechar', html: '&times;' });
   hero.append(close);
@@ -203,7 +203,8 @@ export function openProduct(item, onAdd) {
     const g1 = el('div', { class: 'opt-group' }); g1.append(groupHead('Tamanho', null, 'req'), sizePicker([{ id: 'milk', nome: 'Milk-shake', tamanhos: M.MILKSHAKE.tamanhos }], state, () => recompute()));
     body.append(g1);
     const gs = el('div', { class: 'opt-group' });
-    gs.append(groupHead('Sabores', `1º incluso. Cada sabor a mais: + ${money(M.MILKSHAKE.precoSaborExtra)}`, 'req+'));
+    const msSub = ((M.textos || {}).msSaboresDesc || '1º incluso. Cada sabor a mais: + {valor}').replace('{valor}', money(M.MILKSHAKE.precoSaborExtra ?? 5));
+    gs.append(groupHead('Sabores', msSub, 'req+'));
     M.MILKSHAKE.sabores.forEach((s) => {
       const mark = el('span', { class: 'mark sq', html: '' });
       const row = el('div', { class: 'opt' }, [el('span', { class: 'oname', text: s.nome }), mark]);
@@ -280,7 +281,7 @@ export function openProduct(item, onAdd) {
     }
     if (item.tipo === 'milkshake') {
       const t = M.MILKSHAKE.tamanhos.find((x) => x.id === state.tamanhoId); if (t) p += t.preco;
-      p += Math.max(0, state.sabores.size - 1) * M.MILKSHAKE.precoSaborExtra;
+      p += Math.max(0, state.sabores.size - 1) * (M.MILKSHAKE.precoSaborExtra ?? 5);
     }
     if (item.tipo === 'sorvete') {
       p += item.raw.preco;
@@ -361,6 +362,8 @@ function buildLine(item, state, unit, temAcomp) {
     // simples (salada/fondue com acomp, ou bebida/chocolate quente sem nada)
     titulo = item.nome;
     if (state.tipo) blocos.push({ t: 'sec', nome: 'Sabor', itens: [`1x ${state.tipo}`] });
+    // salada de frutas: imprime a composição (frutas) p/ a produção, igual os combinados
+    if (item.catId === 'saladas' && item.desc) blocos.push({ t: 'txt', txt: item.desc });
     blocos.push(...acompBlocos);
   }
   if (['monte', 'combo', 'frape', 'milkshake'].includes(item.tipo)) tamanho = titulo;

@@ -8,7 +8,7 @@ import { CONFIG, hasSupabase } from './config.js';
 import { sb } from './data.js';
 import { printer } from './printing.js';
 import * as SEED from './menu-data.js';
-import { el, money, toast, escapeHtml } from './util.js';
+import { el, money, toast, escapeHtml, imgUrl } from './util.js';
 import { renderClientes } from './crm.js';
 import { renderDashboard } from './dashboard.js';
 
@@ -306,6 +306,12 @@ function mergedSeed() {
     seed.categoriaFotos = { ...seed.categoriaFotos, ...(old.categoriaFotos || {}) };
     seed.esgotados = old.esgotados || [];
     if (old.DESTAQUES) seed.DESTAQUES = old.DESTAQUES;
+    // preserva os RECIPIENTES da loja (nomes, tamanhos em ml, preços, e adições/remoções de copo/tigela).
+    // Mantém recipientes novos que venham do código; o que a loja apagou continua apagado.
+    if (Array.isArray(old.RECIPIENTES) && old.RECIPIENTES.length) {
+      const novos = seed.RECIPIENTES.filter((sr) => !old.RECIPIENTES.some((or) => or.id === sr.id));
+      seed.RECIPIENTES = [...old.RECIPIENTES.map((r) => ({ ...r, tamanhos: (r.tamanhos || []).map((t) => ({ ...t })) })), ...novos];
+    }
     if (old.secao2) seed.secao2 = old.secao2;
     if (old.upsell) seed.upsell = old.upsell;
     if (old.cupons) seed.cupons = old.cupons;
@@ -480,7 +486,7 @@ function renderCardapio() {
     upBox.innerHTML = '';
     if (!up.itens.length) upBox.append(el('p', { class: 'hint', text: 'Nenhuma oferta ainda. Adicione abaixo.' }));
     up.itens.forEach((it, idx) => {
-      const thumb = it.foto ? el('img', { class: 'mi-thumb', src: it.foto }) : el('div', { class: 'mi-thumb', html: '<span>🍧</span>' });
+      const thumb = it.foto ? el('img', { class: 'mi-thumb', src: imgUrl(it.foto, 120, 72), loading: 'lazy', decoding: 'async', onerror: function () { if (this.dataset.orig) this.replaceWith(el('div', { class: 'mi-thumb', html: '<span>🍧</span>' })); else { this.dataset.orig = '1'; this.src = it.foto; } } }) : el('div', { class: 'mi-thumb', html: '<span>🍧</span>' });
       const nome = el('input', { type: 'text', value: it.nome || '', placeholder: 'Nome da oferta', style: 'flex:1;text-align:left' }); nome.addEventListener('input', () => it.nome = nome.value);
       const preco = el('input', { type: 'number', step: '0.50', value: Number(it.preco || 0).toFixed(2), style: 'width:90px;text-align:right' }); preco.addEventListener('input', () => it.preco = parseFloat(preco.value) || 0);
       const rm = el('button', { class: 'btn btn-ghost mini', text: '✕', onclick: () => { up.itens.splice(idx, 1); renderUp(); } });
@@ -546,11 +552,28 @@ function renderCardapio() {
   combosCard.append(saveBtn(menu));
   host.append(combosCard);
 
-  // Recipientes (tamanhos)
-  const recCard = el('div', { class: 'panel-card' }, [el('h3', { text: 'Tamanhos (Monte Seu Açaí)' }), el('p', { class: 'hint', text: 'Preço base por recipiente e tamanho.' })]);
-  menu.RECIPIENTES.forEach((r) => r.tamanhos.forEach((t) => recCard.append(menuRow({
-    id: t.id, nome: `${r.nome} ${t.ml}ml`, price: t.preco, onPrice: (v) => { t.preco = v; }, simple: true,
-  }))));
+  // Recipientes (tamanhos): nome do recipiente + ml + preço, adicionar/remover tamanho
+  const recCard = el('div', { class: 'panel-card' }, [el('h3', { text: 'Tamanhos (Monte e Combinados)' }), el('p', { class: 'hint', text: 'Nome do recipiente, e o ml + preço de cada tamanho. Mudar o ml muda o nome que o cliente vê (ex: "Copo 500ml"). "+ Adicionar tamanho" cria; ✕ remove. Deixe ao menos 1 tamanho.' })]);
+  menu.RECIPIENTES.forEach((r) => {
+    const nomeInp = el('input', { class: 'mi-edit', type: 'text', value: r.nome || '', placeholder: 'Nome (ex: Copo)', style: 'font-weight:800;max-width:170px;margin-top:12px' });
+    nomeInp.addEventListener('input', () => { r.nome = nomeInp.value; });
+    recCard.append(nomeInp);
+    r.tamanhos.forEach((t) => {
+      const ml = el('input', { type: 'number', step: '50', min: '0', value: t.ml, style: 'width:84px;text-align:right' });
+      ml.addEventListener('input', () => { t.ml = parseInt(ml.value, 10) || 0; });
+      const preco = el('input', { class: 'price', type: 'number', step: '0.50', value: Number(t.preco).toFixed(2) });
+      preco.addEventListener('input', () => { t.preco = parseFloat(preco.value) || 0; });
+      const rm = el('button', { class: 'btn btn-ghost mini', title: 'Remover tamanho', text: '✕', onclick: () => {
+        if (r.tamanhos.length <= 1) return toast('Deixe pelo menos 1 tamanho.');
+        if (confirm(`Remover ${r.nome} ${t.ml}ml?`)) { r.tamanhos = r.tamanhos.filter((x) => x.id !== t.id); renderCardapio(); }
+      } });
+      recCard.append(el('div', { class: 'menu-item' }, [
+        el('div', { class: 'mi-name' }, el('span', { text: 'Tamanho' })),
+        ml, el('span', { class: 'hint', style: 'margin:0', text: 'ml' }), preco, rm,
+      ]));
+    });
+    recCard.append(el('button', { class: 'btn btn-ghost mini', style: 'margin:4px 0 6px', text: '+ Adicionar tamanho em ' + (r.nome || 'recipiente'), onclick: () => { r.tamanhos.push({ id: r.id + '-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6), ml: 300, preco: 15 }); renderCardapio(); } }));
+  });
   recCard.append(saveBtn(menu));
   host.append(recCard);
 
@@ -579,6 +602,7 @@ function renderCardapio() {
     txtRow('Embaixo do "Monte Seu Açaí"', 'monteDesc', SEED.TEXTOS.monteDesc),
     txtRow('Embaixo de "Base"', 'baseDesc', SEED.TEXTOS.baseDesc),
     txtRow('Embaixo de "Turbine / Adicione acompanhamentos"', 'turbineDesc', SEED.TEXTOS.turbineDesc),
+    txtRow('Embaixo de "Sabores" (Milk Shake) — use {valor} pro preço do sabor extra', 'msSaboresDesc', SEED.TEXTOS.msSaboresDesc),
     txtRow('Exemplo embaixo de "Observação"', 'obsExemplo', SEED.TEXTOS.obsExemplo),
     txtRow('Texto cinza dentro do campo de observação', 'obsPlaceholder', SEED.TEXTOS.obsPlaceholder),
     saveBtn(menu),
@@ -628,7 +652,7 @@ function menuRow({ id, nome, sub, price, foto, isDestaque, esgotado, onPrice, on
   if (onDesc) { const d = el('input', { class: 'mi-edit mi-desc', type: 'text', value: sub || '', placeholder: 'Descrição / ingredientes' }); d.addEventListener('input', () => onDesc(d.value)); descEl = d; }
   else if (sub) descEl = el('small', { text: sub });
   const row = el('div', { class: 'menu-item' + (onName ? ' mi-editavel' : '') }, [
-    !simple ? (foto ? el('img', { class: 'mi-thumb', src: foto }) : el('div', { class: 'mi-thumb', html: '<span>🍧</span>' })) : null,
+    !simple ? (foto ? el('img', { class: 'mi-thumb', src: imgUrl(foto, 120, 72), loading: 'lazy', decoding: 'async', onerror: function () { if (this.dataset.orig) this.replaceWith(el('div', { class: 'mi-thumb', html: '<span>🍧</span>' })); else { this.dataset.orig = '1'; this.src = foto; } } }) : el('div', { class: 'mi-thumb', html: '<span>🍧</span>' })) : null,
     el('div', { class: 'mi-name' }, [nameEl, descEl]),
     !noStar && !simple ? starEl(isDestaque, onStar) : null,
     priceInput,
@@ -666,14 +690,29 @@ function esgSwitch(on, cb) { const inp = el('input', { type: 'checkbox' }); inp.
 async function compressImage(file, maxDim = 1080, quality = 0.85) {
   if (!file.type || !file.type.startsWith('image/')) return { blob: file, jpg: false };
   try {
-    const bmp = await createImageBitmap(file);
-    let { width, height } = bmp;
+    const bmp = await loadBitmap(file);
+    let width = bmp.naturalWidth || bmp.width, height = bmp.naturalHeight || bmp.height;
+    if (!width || !height) throw new Error('sem dimensao');
     if (Math.max(width, height) > maxDim) { const s = maxDim / Math.max(width, height); width = Math.round(width * s); height = Math.round(height * s); }
     const c = document.createElement('canvas'); c.width = width; c.height = height;
     c.getContext('2d').drawImage(bmp, 0, 0, width, height);
     const blob = await new Promise((res) => c.toBlob(res, 'image/jpeg', quality));
     return blob && blob.size < file.size ? { blob, jpg: true } : { blob: file, jpg: false };
   } catch { return { blob: file, jpg: false }; }
+}
+// Decodifica o arquivo via createImageBitmap; se falhar (alguns PNG/HEIC), cai pro <img>.
+function loadBitmap(file) {
+  if (window.createImageBitmap) return createImageBitmap(file).catch(() => imgDecode(file));
+  return imgDecode(file);
+}
+function imgDecode(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const im = new Image();
+    im.onload = () => { URL.revokeObjectURL(url); resolve(im); };
+    im.onerror = () => { URL.revokeObjectURL(url); reject(new Error('decode')); };
+    im.src = url;
+  });
 }
 
 function fotoBtn(cb) {
@@ -687,7 +726,7 @@ function fotoBtn(cb) {
       const base = (f.name.replace(/\.[^.]+$/, '') || 'foto').replace(/[^\w]/g, '').slice(0, 30) || 'foto';
       const ext = jpg ? 'jpg' : (f.name.split('.').pop() || 'jpg');
       const path = `${STORE_SLUG}/${Date.now()}-${base}.${ext}`;
-      const { error } = await client.storage.from('fotos').upload(path, blob, { upsert: true, contentType: jpg ? 'image/jpeg' : f.type });
+      const { error } = await client.storage.from('fotos').upload(path, blob, { upsert: true, cacheControl: '31536000', contentType: jpg ? 'image/jpeg' : f.type });
       if (error) throw error;
       const { data } = client.storage.from('fotos').getPublicUrl(path);
       cb(data.publicUrl); b.textContent = '✓';

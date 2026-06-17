@@ -7,6 +7,9 @@
 
 const ESC = 0x1b, GS = 0x1d, LF = 0x0a;
 const WIDTH = 32; // 58mm = 32 colunas (use 48 para 80mm)
+// Tamanho do "corpo" do papel (detalhes/acompanhamentos): altura dobrada, largura normal.
+// Deixa a letra menor um pouco maior sem estourar as 32 colunas. Títulos seguem em 0x11 (maiores).
+const BODY = 0x01;
 
 const noAccent = (s) => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '');
 const enc = new TextEncoder();
@@ -46,7 +49,7 @@ export function deliveryTicket(order, store) {
   const retirada = order.delivery_type === 'retirada';
   t.align(1).bold(true).size(0x11).line(noAccent(store?.nome || 'ACAI MAIS SABOR'));
   t.size(0).line(retirada ? 'VIA DA RETIRADA' : 'VIA DO ENTREGADOR').bold(false);
-  t.size(0x11).bold(true).line(pedidoLabel(order)).size(0).bold(false);
+  t.size(0x11).bold(true).line(pedidoLabel(order)).size(BODY).bold(false);
   t.align(0).rule();
   t.line('Cliente: ' + order.customer_name);
   t.line('Tel: ' + order.customer_phone);
@@ -63,7 +66,7 @@ export function deliveryTicket(order, store) {
   t.line('Subtotal: ' + money(order.subtotal));
   if (!retirada) t.line('Taxa de entrega: ' + money(order.delivery_fee));
   if (Number(order.discount) > 0) t.line('Desconto' + (order.coupon ? ' (' + order.coupon + ')' : '') + ': -' + money(order.discount));
-  t.size(0x11).bold(true).line('TOTAL: ' + money(order.total)).size(0).bold(false);
+  t.size(0x11).bold(true).line('TOTAL: ' + money(order.total)).size(BODY).bold(false);
   t.rule();
   const tempo = order.eta_max || order.eta_min;
   if (tempo) {
@@ -83,10 +86,10 @@ export function productionTickets(order) {
   const chunks = [];
   units.forEach((it, idx) => {
     const t = new Ticket();
-    t.align(1).size(0x11).bold(true).line(pedidoLabel(order)).size(0).bold(false);
+    t.align(1).size(0x11).bold(true).line(pedidoLabel(order)).size(BODY).bold(false);
     t.line('Producao ' + padNum(idx + 1) + ' - Item ' + String(idx + 1).padStart(2, '0') + ' de ' + String(total).padStart(2, '0'));
     t.align(0).rule();
-    t.bold(true).size(0x11).line(it.nome).size(0).bold(false);
+    t.bold(true).size(0x11).line(it.nome).size(BODY).bold(false);
     const blocos = it.blocos || [];
     if (blocos.length) {
       blocos.forEach((b) => {

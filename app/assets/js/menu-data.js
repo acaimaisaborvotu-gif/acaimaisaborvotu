@@ -307,6 +307,7 @@ export const TEXTOS = {
   monteDesc: 'Escolha o recipiente, o tamanho, a base e os acompanhamentos do seu jeito',
   baseDesc: 'Escolha pelo menos 1. Pode trocar o Açaí ou combinar mais de uma base.',
   turbineDesc: 'Opcional, soma ao preço',
+  msSaboresDesc: '1º incluso. Cada sabor a mais: + {valor}',
   obsExemplo: 'Ex: sem granola, do seu jeito',
   obsPlaceholder: 'Alguma observação?',
   // Mensagens do CRM (botão WhatsApp). {nome} = 1º nome do cliente, {loja} = nome da loja.
