@@ -74,7 +74,9 @@ async function load(corpo) {
 
   // KPIs
   const kpis = el('div', { class: 'kpi-grid' }, [
-    kpi('Faturamento', money(r.faturamento || 0), 'principal'),
+    kpi('Faturamento (produtos)', money(r.faturamento_liq || 0), 'principal'),
+    kpi('Taxas de entrega', money(r.taxa_entrega || 0)),
+    kpi('Total recebido', money(r.faturamento || 0)),
     kpi('Vendas', r.vendas || 0),
     kpi('Ticket médio', money(r.ticket_medio || 0)),
     kpi('Novos clientes', r.novos_clientes || 0),

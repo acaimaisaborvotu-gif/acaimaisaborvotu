@@ -51,10 +51,17 @@ function overlayShell(item) {
   document.body.style.overflow = 'hidden';
   requestAnimationFrame(() => overlay.classList.add('show'));
 
-  const destroy = () => { overlay.classList.remove('show'); document.body.style.overflow = ''; setTimeout(() => overlay.remove(), 280); };
+  const onEsc = (e) => { if (e.key === 'Escape') destroy(); };
+  const destroy = () => {
+    overlay.classList.remove('show');
+    document.removeEventListener('keydown', onEsc);
+    // só libera o scroll do body se não houver outro modal aberto por baixo (ex: a sacola)
+    document.body.style.overflow = document.querySelectorAll('.overlay').length > 1 ? 'hidden' : '';
+    setTimeout(() => overlay.remove(), 280);
+  };
   close.addEventListener('click', destroy);
   overlay.addEventListener('click', (e) => { if (e.target === overlay) destroy(); });
-  document.addEventListener('keydown', function esc(e) { if (e.key === 'Escape') { destroy(); document.removeEventListener('keydown', esc); } });
+  document.addEventListener('keydown', onEsc);
   return { overlay, sheet, body, foot, destroy };
 }
 
@@ -169,7 +176,9 @@ function bolasGroup(group, state) {
 
 const totalBolas = (state) => [...state.bolas.values()].reduce((a, b) => a + b, 0);
 
-export function openProduct(item, onAdd) {
+// priceOverride (opcional): preço-base vindo de uma oferta (ex: upsell com desconto),
+// usado no lugar do preço de cardápio nos itens simples.
+export function openProduct(item, onAdd, priceOverride) {
   M = menu();
   const { body, foot, destroy } = overlayShell(item);
   const state = { recipienteId: null, tamanhoId: null, bases: new Set(), acomp: new Map(), sabores: new Set(), bolas: new Map(), tipo: null, obs: '', qtd: 1 };
@@ -272,7 +281,7 @@ export function openProduct(item, onAdd) {
 
   function precoUnit() {
     let p = 0;
-    if (item.tipo === 'simples') { p = item.raw.preco; if (temAcomp) p += acompSum(); return p; }
+    if (item.tipo === 'simples') { p = Number.isFinite(priceOverride) ? priceOverride : item.raw.preco; if (temAcomp) p += acompSum(); return p; }
     if (item.tipo === 'combo') p += item.raw.valorBase;
     if (item.tipo === 'monte' || item.tipo === 'combo' || item.tipo === 'frape') {
       const recs = item.tipo === 'combo' ? comboRecips() : item.tipo === 'frape' ? [{ tamanhos: M.FRAPE.tamanhos }] : M.RECIPIENTES;

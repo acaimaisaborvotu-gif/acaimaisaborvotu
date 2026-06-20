@@ -45,7 +45,7 @@ function explode(items) {
 // ---- Via do entregador (2 vias iguais) ----
 export function deliveryTicket(order, store) {
   const t = new Ticket();
-  const totalItens = explode(order.items).length;
+  const totalItens = explode(order.items || []).length;
   const retirada = order.delivery_type === 'retirada';
   t.align(1).bold(true).size(0x11).line(noAccent(store?.nome || 'ACAI MAIS SABOR'));
   t.size(0).line(retirada ? 'VIA DA RETIRADA' : 'VIA DO ENTREGADOR').bold(false);
@@ -127,7 +127,7 @@ export function productionTickets(order) {
     if (blocos.length) {
       blocos.forEach((b) => {
         if (b.t === 'sec') { t.bold(true).line(noAccent(b.nome + ':')).bold(false); (b.itens || []).forEach((x) => t.line('  ' + noAccent(x))); }
-        else if (b.t === 'combo') { t.bold(true).line('Combinado:').line('  ' + noAccent(b.nome)).bold(false); if (b.desc) t.line(noAccent(b.desc)); }
+        else if (b.t === 'combo') { t.bold(true).line('Combinado:').line('  ' + noAccent(b.nome)).bold(false); if (b.desc) wrap(noAccent(b.desc)).forEach((l) => t.line(l)); }
         else if (b.t === 'obs') { t.feed(1).bold(true).line('OBS: ' + noAccent(b.txt)).bold(false); }
         else t.line(noAccent(b.txt));
       });

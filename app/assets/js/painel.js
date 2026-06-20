@@ -286,7 +286,8 @@ function alertNew() {
 // ---------------------------------------------------------------- Cardápio (editor)
 function currentMenu() { return cfg.menu || seedMenu(); }
 function seedMenu() {
-  return { RECIPIENTES: SEED.RECIPIENTES, BASES: SEED.BASES, ACOMPANHAMENTOS: SEED.ACOMPANHAMENTOS, COMBOS: SEED.COMBOS, DESTAQUES: SEED.DESTAQUES, FRAPE: SEED.FRAPE, MILKSHAKE: SEED.MILKSHAKE, SALADAS: SEED.SALADAS, SOBREMESAS: SEED.SOBREMESAS, BEBIDAS: SEED.BEBIDAS, CATEGORIAS: SEED.CATEGORIAS, FOTOS_SEED: { ...SEED.FOTOS_SEED }, categoriaFotos: { ...SEED.CATEGORIA_FOTOS }, esgotados: [], secao2: { ...SEED.SECAO2, itens: [] }, upsell: { ...SEED.UPSELL, itens: [] }, cupons: [...(SEED.CUPONS || [])], textos: { ...SEED.TEXTOS }, removidos: [] };
+  const c = (x) => structuredClone(x); // cópia profunda: mergedSeed muta o resultado, então não pode tocar o módulo SEED
+  return { RECIPIENTES: c(SEED.RECIPIENTES), BASES: c(SEED.BASES), ACOMPANHAMENTOS: c(SEED.ACOMPANHAMENTOS), COMBOS: c(SEED.COMBOS), DESTAQUES: c(SEED.DESTAQUES), FRAPE: c(SEED.FRAPE), MILKSHAKE: c(SEED.MILKSHAKE), SALADAS: c(SEED.SALADAS), SOBREMESAS: c(SEED.SOBREMESAS), BEBIDAS: c(SEED.BEBIDAS), CATEGORIAS: c(SEED.CATEGORIAS), FOTOS_SEED: { ...SEED.FOTOS_SEED }, categoriaFotos: { ...SEED.CATEGORIA_FOTOS }, esgotados: [], secao2: { ...SEED.SECAO2, itens: [] }, upsell: { ...SEED.UPSELL, itens: [] }, cupons: [...(SEED.CUPONS || [])], textos: { ...SEED.TEXTOS }, removidos: [] };
 }
 // Aplica a estrutura nova do código preservando o que a loja já editou
 // (fotos, esgotados, destaques, seções E PREÇOS alterados no painel)

@@ -280,7 +280,7 @@ function openCart() {
           const precisaEscolher = catItem && (catItem.tipo !== 'simples' || (catItem.raw && Array.isArray(catItem.raw.tipos) && catItem.raw.tipos.filter(Boolean).length));
           if (precisaEscolher) {
             track.viewItem(catItem);
-            openProduct(catItem, (line) => { cart.add(line); track.addToCart(line); paint(); });
+            openProduct(catItem, (line) => { cart.add(line); track.addToCart(line); paint(); }, Number(u.preco)); // usa o preço da oferta
             return;
           }
           // Item simples sem escolha (ex: água): 1 clique, preserva o preço da oferta.
