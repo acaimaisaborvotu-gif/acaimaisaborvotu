@@ -265,12 +265,16 @@ function openCart() {
     // Upsell (oferta antes de enviar) — configurável no painel
     const up = upsellItems();
     if (up && up.itens.length) {
+      // ids das bebidas, pra reconhecer bebida adicionada pelo upsell (senão vira "upsell"
+      // e perde o aviso/via de bebida e ainda gera papel de produção)
+      const bebidaIds = new Set((catalog.find((c) => c.id === 'bebidas')?.items || []).map((i) => i.id));
       const upBox = el('div', { class: 'opt-group', style: 'margin-top:14px' });
       upBox.append(el('div', { class: 'opt-head' }, el('div', { class: 't', text: up.titulo })));
       up.itens.forEach((u) => {
         const add = el('button', { class: 'btn btn-amarelo mini', style: 'flex:0 0 auto', text: '+ ' + money(u.preco) });
         add.addEventListener('click', () => {
-          const line = cart.add({ tipo: 'upsell', refId: u.refId || u.id, catId: 'upsell', nome: u.nome, precoUnit: Number(u.preco) || 0, qtd: 1, print: { titulo: u.nome, detalhes: [] } });
+          const refId = u.refId || u.id;
+          const line = cart.add({ tipo: 'upsell', refId, catId: bebidaIds.has(refId) ? 'bebidas' : 'upsell', nome: u.nome, precoUnit: Number(u.preco) || 0, qtd: 1, print: { titulo: u.nome, detalhes: [] } });
           track.addToCart(line);
           paint();
         });
