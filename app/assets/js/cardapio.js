@@ -274,6 +274,16 @@ function openCart() {
         const add = el('button', { class: 'btn btn-amarelo mini', style: 'flex:0 0 auto', text: '+ ' + money(u.preco) });
         add.addEventListener('click', () => {
           const refId = u.refId || u.id;
+          const catItem = catalog.flatMap((c) => c.items).find((it) => it.id === refId);
+          // Se o produto exige escolha (sabor do refri, tamanho/base do açaí...), abre o
+          // modal pra o cliente escolher, em vez de adicionar "no escuro".
+          const precisaEscolher = catItem && (catItem.tipo !== 'simples' || (catItem.raw && Array.isArray(catItem.raw.tipos) && catItem.raw.tipos.filter(Boolean).length));
+          if (precisaEscolher) {
+            track.viewItem(catItem);
+            openProduct(catItem, (line) => { cart.add(line); track.addToCart(line); paint(); });
+            return;
+          }
+          // Item simples sem escolha (ex: água): 1 clique, preserva o preço da oferta.
           const line = cart.add({ tipo: 'upsell', refId, catId: bebidaIds.has(refId) ? 'bebidas' : 'upsell', nome: u.nome, precoUnit: Number(u.preco) || 0, qtd: 1, print: { titulo: u.nome, detalhes: [] } });
           track.addToCart(line);
           paint();
