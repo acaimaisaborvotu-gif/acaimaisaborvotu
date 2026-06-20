@@ -64,13 +64,18 @@ export function isOpenNow(settings = getSettings(), now = new Date()) {
   return fecha > abre ? mins >= abre && mins < fecha : mins >= abre || mins < fecha;
 }
 export function nextOpenLabel(settings = getSettings(), now = new Date()) {
+  const mins = now.getHours() * 60 + now.getMinutes();
   for (let i = 0; i < 7; i++) {
     const d = (now.getDay() + i) % 7;
     const h = settings.horarios?.[d];
     if (!h) continue;
-    if (i === 0 && isOpenNow(settings, now)) return null;
+    if (i === 0) {
+      if (isOpenNow(settings, now)) return null;
+      // ainda vai abrir hoje -> "hoje"; já passou o horário de hoje (fechou) -> pula pro próximo dia
+      if (mins < hmToMin(h.abre)) return `hoje às ${h.abre}`;
+      continue;
+    }
     const dias = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
-    if (i === 0) return `hoje às ${h.abre}`;
     if (i === 1) return `amanhã às ${h.abre}`;
     return `${dias[d]} às ${h.abre}`;
   }

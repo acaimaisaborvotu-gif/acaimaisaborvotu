@@ -53,9 +53,20 @@ export function deliveryTicket(order, store) {
   t.align(0).rule();
   t.line('Cliente: ' + order.customer_name);
   t.line('Tel: ' + order.customer_phone);
-  if (!retirada && order.address) wrap('End: ' + order.address).forEach((l) => t.line(l));
+  if (!retirada && order.address) { t.bold(true); wrap('End: ' + order.address).forEach((l) => t.line(l)); t.bold(false); } // endereço em negrito p/ o entregador ler fácil
   else if (retirada && order.address) wrap(order.address).forEach((l) => t.line(l)); // na retirada o address carrega a observação do cliente
   t.bold(true).line('Itens na sacola: ' + totalItens).bold(false);
+  // Aviso de bebida (que não vai pra produção): o entregador/atendente vê o que pegar.
+  const bebidas = (order.items || []).filter((it) => it.catId === 'bebidas');
+  if (bebidas.length) {
+    t.feed(1).bold(true).line('ATENCAO - TEM BEBIDA:');
+    bebidas.forEach((b) => {
+      const sab = (b.blocos || []).find((x) => x.t === 'sec' && /sabor/i.test(x.nome || ''));
+      const sabTxt = sab ? ' (' + sab.itens.map((s) => String(s).replace(/^[0-9]+x /, '')).join(', ') + ')' : '';
+      t.line('  ' + (b.qtd || 1) + 'x ' + noAccent(b.nome) + noAccent(sabTxt));
+    });
+    t.bold(false).feed(1);
+  }
   t.rule();
   const pg = { pix: 'PIX na entrega', cartao: 'Cartao na maquininha', dinheiro: 'Dinheiro' }[order.payment_method] || order.payment_method || '';
   t.line('Pagamento: ' + pg);
@@ -79,9 +90,31 @@ export function deliveryTicket(order, store) {
   return t.bytes();
 }
 
+// ---- Via das bebidas: sai junto com a via do entregador (pra grampear). NÃO vai pra produção. ----
+export function bebidaTicket(order) {
+  const bebidas = (order.items || []).filter((it) => it.catId === 'bebidas');
+  if (!bebidas.length) return null;
+  const t = new Ticket();
+  t.align(1).size(0x11).bold(true).line(pedidoLabel(order)).size(0).bold(false);
+  t.line('BEBIDAS - vai com a entrega');
+  t.align(0).rule();
+  t.size(BODY).bold(true);
+  bebidas.forEach((b) => {
+    const sab = (b.blocos || []).find((x) => x.t === 'sec' && /sabor/i.test(x.nome || ''));
+    const sabTxt = sab ? ' (' + sab.itens.map((s) => String(s).replace(/^[0-9]+x /, '')).join(', ') + ')' : '';
+    t.line((b.qtd || 1) + 'x ' + noAccent(b.nome) + noAccent(sabTxt));
+  });
+  t.bold(false).size(0);
+  t.line(''.padEnd(WIDTH, '='));
+  t.cut();
+  return t.bytes();
+}
+
 // ---- Vias de produção (1 papel por item) ----
 export function productionTickets(order) {
-  const units = explode(order.items);
+  // Bebidas (água, refri, etc.) NÃO geram via de produção: a cozinha não faz bebida.
+  // Elas saem só na via do entregador (aviso "TEM BEBIDA"). Veja deliveryTicket.
+  const units = explode((order.items || []).filter((it) => it.catId !== 'bebidas'));
   const total = units.length;
   const chunks = [];
   units.forEach((it, idx) => {
@@ -94,6 +127,8 @@ export function productionTickets(order) {
     if (blocos.length) {
       blocos.forEach((b) => {
         if (b.t === 'sec') { t.bold(true).line(noAccent(b.nome + ':')).bold(false); (b.itens || []).forEach((x) => t.line('  ' + noAccent(x))); }
+        else if (b.t === 'combo') { t.bold(true).line('Combinado:').line('  ' + noAccent(b.nome)).bold(false); if (b.desc) t.line(noAccent(b.desc)); }
+        else if (b.t === 'obs') { t.feed(1).bold(true).line('OBS: ' + noAccent(b.txt)).bold(false); }
         else t.line(noAccent(b.txt));
       });
     } else if (it.detalhes && it.detalhes.length) {
@@ -190,13 +225,14 @@ export const printer = {
   },
 
   // ---- Comum ----
-  // Imprime o pedido: 2 vias do entregador + N vias de produção (1 por item)
+  // Imprime: vias do entregador + via das bebidas (grampear junto) + vias de produção (1 por item, sem bebida)
   async printOrder(order, store) {
     // Entrega = 2 vias do entregador; Retirada = 1 via só.
     const vias = order.delivery_type === 'retirada'
       ? [deliveryTicket(order, store)]
       : [deliveryTicket(order, store), deliveryTicket(order, store)];
-    const jobs = [...vias, ...productionTickets(order)];
+    const bebida = bebidaTicket(order); // sai logo após a via do entregador, pra grampear junto
+    const jobs = [...vias, ...(bebida ? [bebida] : []), ...productionTickets(order)];
     if (pcfg.method === 'serial') { for (const j of jobs) { await this.writeSerial(j); await new Promise((r) => setTimeout(r, 250)); } }
     else { await this.qzPrint(jobs); }
     return jobs.length;

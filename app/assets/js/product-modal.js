@@ -342,8 +342,7 @@ function buildLine(item, state, unit, temAcomp) {
     const t = recs.flatMap((r) => r.tamanhos).find((x) => x.id === state.tamanhoId);
     const recip = recs.find((r) => r.tamanhos.some((x) => x.id === state.tamanhoId));
     titulo = `${recip.nome} ${t.ml}ml`;
-    blocos.push(baseBloco(state), { t: 'txt', txt: `Combinado ${item.nome}` });
-    if (item.desc) blocos.push({ t: 'txt', txt: item.desc });
+    blocos.push(baseBloco(state), { t: 'combo', nome: item.nome, desc: item.desc || '' });
     blocos.push(...acompBlocos);
   } else if (item.tipo === 'frape') {
     const t = M.FRAPE.tamanhos.find((x) => x.id === state.tamanhoId);
@@ -368,10 +367,14 @@ function buildLine(item, state, unit, temAcomp) {
     blocos.push(...acompBlocos);
   }
   if (['monte', 'combo', 'frape', 'milkshake'].includes(item.tipo)) tamanho = titulo;
-  if (state.obs) blocos.push({ t: 'txt', txt: `Obs: ${state.obs}` });
+  if (state.obs) blocos.push({ t: 'obs', txt: state.obs });
 
   // versão compacta em strings (sacola / checkout / WhatsApp)
-  const detalhes = blocos.map((b) => b.t === 'sec' ? `${b.nome}: ${b.itens.join(', ')}` : b.txt);
+  const detalhes = blocos.map((b) =>
+    b.t === 'sec' ? `${b.nome}: ${b.itens.join(', ')}`
+    : b.t === 'combo' ? `Combinado ${b.nome}${b.desc ? ' - ' + b.desc : ''}`
+    : b.t === 'obs' ? `Obs: ${b.txt}`
+    : b.txt);
 
   return {
     tipo: item.tipo, refId: item.id, catId: item.catId, nome: titulo, prodNome: item.nome,
