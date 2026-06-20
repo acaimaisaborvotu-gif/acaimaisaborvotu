@@ -62,12 +62,13 @@ function paint() {
 
 async function load(corpo) {
   const [de, ate] = await intervalo();
-  const [resumo, porDia, topItens, topSizes, topAcomps] = await Promise.all([
+  const [resumo, porDia, topItens, topSizes, topAcomps, cupons] = await Promise.all([
     rpc('dashboard_summary', { p_store: _store, p_de: de, p_ate: ate }),
     rpc('dashboard_sales_by_day', { p_store: _store, p_de: de, p_ate: ate }),
     rpc('dashboard_top_items', { p_store: _store, p_de: de, p_ate: ate, p_limit: 10, p_order: 'qtd' }),
     rpc('dashboard_top_sizes', { p_store: _store, p_de: de, p_ate: ate }),
     rpc('dashboard_top_acomps', { p_store: _store, p_de: de, p_ate: ate, p_limit: 15 }),
+    rpc('dashboard_coupons', { p_store: _store, p_de: de, p_ate: ate }),
   ]);
   corpo.innerHTML = '';
   const r = (Array.isArray(resumo) ? resumo[0] : resumo) || {};
@@ -86,6 +87,9 @@ async function load(corpo) {
     kpi('Descontos', money(r.descontos || 0)),
   ]);
   corpo.append(card('Resumo do período', kpis));
+
+  // Pedidos com cupom de desconto
+  corpo.append(couponsCard(Array.isArray(cupons) ? cupons : []));
 
   // Vendas por dia
   const dias = Array.isArray(porDia) ? porDia : [];
@@ -135,6 +139,21 @@ function rankCard(titulo, rows) {
     ]);
   }));
   return card(titulo, rank);
+}
+
+// Pedidos que usaram cupom no período: por código, nº de pedidos e total descontado.
+function couponsCard(rows) {
+  if (!rows.length) return card('Pedidos com cupom', el('p', { class: 'hint', text: 'Nenhum pedido com cupom no período.' }));
+  const totalPed = rows.reduce((s, r) => s + (Number(r.pedidos) || 0), 0);
+  const totalDesc = rows.reduce((s, r) => s + (Number(r.desconto) || 0), 0);
+  const list = el('div', { class: 'rank' }, rows.map((r, idx) => el('div', { class: 'rank-item' },
+    el('div', { class: 'rank-head' }, [
+      el('span', { text: `${idx + 1}. ${r.coupon || '(sem código)'}` }),
+      el('b', { text: `${r.pedidos} pedido${Number(r.pedidos) === 1 ? '' : 's'} · -${money(r.desconto || 0)}` }),
+    ]),
+  )));
+  const resumo = el('p', { class: 'hint', style: 'margin-top:8px', text: `Total: ${totalPed} pedido${totalPed === 1 ? '' : 's'} com cupom · ${money(totalDesc)} em descontos.` });
+  return card('Pedidos com cupom', el('div', {}, [list, resumo]));
 }
 
 function kpi(label, valor, mod) {

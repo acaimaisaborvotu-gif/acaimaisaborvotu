@@ -385,9 +385,9 @@ textarea.obs:focus { border-color: var(--magenta); }
 .crm-pager { display: flex; gap: 10px; align-items: center; justify-content: center; margin-top: 12px; }
 
 /* ---- Dashboard ---- */
-.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(108px, 1fr)); gap: 8px; }
-.kpi { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-md); padding: 12px; text-align: center; }
-.kpi-val { font-size: 1.35rem; font-weight: 900; color: var(--ink); line-height: 1.1; }
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.kpi { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-md); padding: 12px 10px; text-align: center; min-width: 0; }
+.kpi-val { font-size: 1.18rem; font-weight: 900; color: var(--ink); line-height: 1.15; overflow-wrap: anywhere; }
 .kpi-lbl { font-size: .76rem; color: var(--ink-soft); margin-top: 3px; }
 .kpi-principal { background: var(--grad-marca); border: none; }
 .kpi-principal .kpi-val, .kpi-principal .kpi-lbl { color: #fff; }
