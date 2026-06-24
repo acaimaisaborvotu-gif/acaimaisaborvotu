@@ -16,7 +16,8 @@ export const STORE = {
 
 // Configurações operacionais (tudo editável no painel, reflete em tempo real)
 export const SETTINGS = {
-  taxaEntrega: 8.0,          // taxa fixa por enquanto
+  taxaEntrega: 8.0,          // taxa padrão de entrega
+  taxasBairro: [],           // exceções por bairro: [{ bairro: 'Esplanada', taxa: 12 }] (o resto usa a padrão)
   pedidoMinimo: 0,           // 0 = sem mínimo
   retiradaMinutos: 20,       // tempo base de retirada na loja
   retiradaIncrementoMin: 5,  // +X min de retirada por lote de pedidos abertos

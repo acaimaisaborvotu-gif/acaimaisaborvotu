@@ -760,6 +760,25 @@ function renderConfig() {
     numRow('Retirada: a cada quantos pedidos', s.retiradaIncrementoCadaPedidos || 10, (v) => s.retiradaIncrementoCadaPedidos = v),
   ]);
 
+  // Taxa por bairro (exceções) — o resto usa a taxa de entrega padrão acima
+  s.taxasBairro = Array.isArray(s.taxasBairro) ? s.taxasBairro : [];
+  const bairroCard = el('div', { class: 'panel-card' }, [el('h3', { text: 'Taxa por bairro (exceções)' }), el('p', { class: 'hint', text: 'A entrega usa a taxa padrão acima. Aqui você cadastra SÓ os bairros com valor diferente (ex: Esplanada R$ 12). O cliente digita o bairro e o sistema reconhece, mesmo com erro de digitação.' })]);
+  const bairroBox = el('div');
+  const renderBairros = () => {
+    bairroBox.innerHTML = '';
+    if (!s.taxasBairro.length) bairroBox.append(el('p', { class: 'hint', text: 'Nenhuma exceção. Todos os bairros pagam a taxa padrão.' }));
+    s.taxasBairro.forEach((b, idx) => {
+      const nome = el('input', { type: 'text', value: b.bairro || '', placeholder: 'Bairro (ex: Esplanada)', style: 'flex:1;min-width:120px;text-align:left' });
+      nome.addEventListener('input', () => b.bairro = nome.value);
+      const tx = el('input', { type: 'number', step: '0.50', value: Number(b.taxa ?? 0).toFixed(2), style: 'width:90px;text-align:right' });
+      tx.addEventListener('input', () => b.taxa = parseFloat(tx.value) || 0);
+      const rm = el('button', { class: 'btn btn-ghost mini', title: 'Remover', text: '✕', onclick: () => { s.taxasBairro.splice(idx, 1); renderBairros(); } });
+      bairroBox.append(el('div', { class: 'menu-item', style: 'gap:8px' }, [nome, el('span', { class: 'hint', style: 'margin:0', text: 'R$' }), tx, rm]));
+    });
+  };
+  renderBairros();
+  bairroCard.append(bairroBox, el('button', { class: 'btn btn-ghost mini', style: 'margin-top:10px', text: '+ Adicionar bairro', onclick: () => { s.taxasBairro.push({ bairro: '', taxa: 12 }); renderBairros(); } }));
+
   const pays = el('div', { class: 'panel-card' }, [el('h3', { text: 'Formas de pagamento (na entrega)' })]);
   [['pix', 'PIX'], ['cartao', 'Cartão'], ['dinheiro', 'Dinheiro']].forEach(([id, label]) => {
     const inp = el('input', { type: 'checkbox' }); inp.checked = (s.pagamentos || []).includes(id);
@@ -786,7 +805,7 @@ function renderConfig() {
     cfg.settings = s; toast('Configurações salvas. Já valem pro cliente.'); e.target.disabled = false;
   } });
 
-  host.append(ops, pays, hours, save);
+  host.append(ops, bairroCard, pays, hours, save);
 }
 
 // ---------------------------------------------------------------- Acessos (logins do painel)

@@ -51,6 +51,35 @@ export function imgUrl(url, box, quality = 72) {
   return rendered + (rendered.includes('?') ? '&' : '?') + 'width=' + box + '&height=' + box + '&resize=contain&quality=' + quality;
 }
 
+// Normaliza nome de bairro pra comparar: tira acento, deixa minúsculo, remove a
+// palavra "bairro" e pontuação. Ex: "Bairro Esplanada!" -> "esplanada".
+export function normBairro(s) {
+  return String(s || '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/\bbairro\b/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ').trim();
+}
+
+// Distância de edição (Levenshtein): quantas letras diferem. Usada pra reconhecer
+// bairro mesmo com erro de digitação (ex: "explanada" ~ "esplanada" = distância 1).
+export function levenshtein(a, b) {
+  a = String(a); b = String(b);
+  const m = a.length, n = b.length;
+  if (!m) return n; if (!n) return m;
+  let prev = Array.from({ length: n + 1 }, (_, i) => i);
+  for (let i = 1; i <= m; i++) {
+    const cur = [i];
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost);
+    }
+    prev = cur;
+  }
+  return prev[n];
+}
+
 // "HH:MM" -> minutos
 export const hmToMin = (hm) => { const [h, m] = String(hm).split(':').map(Number); return h * 60 + m; };
 export const uid = () => Math.random().toString(36).slice(2, 9);

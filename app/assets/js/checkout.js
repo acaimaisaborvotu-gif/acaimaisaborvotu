@@ -5,7 +5,7 @@
 
 import { el, money, toast, maskPhone, phoneCanon, phoneValido, ICON_WHATS } from './util.js';
 import * as cart from './cart.js';
-import { getStore, getSettings, isOpenNow, tempoEntrega, tempoRetirada, submitOrder, openOrdersCount, validarCupom, captureLead, customerLogin } from './data.js';
+import { getStore, getSettings, isOpenNow, tempoEntrega, tempoRetirada, submitOrder, openOrdersCount, validarCupom, captureLead, customerLogin, taxaBairro, sugestaoBairro } from './data.js';
 import { track } from './tracking.js';
 
 const PAGAMENTOS = {
@@ -34,7 +34,7 @@ export function openCheckout({ openOrders: ooInicial = 0 } = {}) {
     metodo: (saved.metodo && settings.pagamentos.includes(saved.metodo)) ? saved.metodo : settings.pagamentos[0], trocoPara: '', cupom: null,
   };
   const sub = cart.subtotal();
-  const taxa = () => (state.tipo === 'entrega' ? settings.taxaEntrega : 0);
+  const taxa = () => (state.tipo === 'entrega' ? taxaBairro(state.bairro, settings) : 0);
   const desconto = () => state.cupom?.desconto || 0;
   const total = () => Math.max(0, sub + taxa() - desconto());
 
@@ -112,6 +112,31 @@ export function openCheckout({ openOrders: ooInicial = 0 } = {}) {
       return i;
     };
 
+    // Bairro com reconhecimento esperto: sugere o nome certo (ex: "Esplanada") mesmo
+    // com erro de digitação e mostra a taxa daquele bairro na hora.
+    const bairroField = () => {
+      const i = el('input', { style: inputStyle, placeholder: 'Seu bairro', value: state.bairro });
+      const sug = el('div', { style: 'margin-top:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap' });
+      const feeNote = el('div', { class: 'muted', style: 'font-size:.82rem;margin-top:5px' });
+      const refresh = () => {
+        state.bairro = i.value;
+        sug.innerHTML = ''; feeNote.innerHTML = '';
+        if (i.value.trim().length < 2) return;
+        const s = sugestaoBairro(i.value, settings);
+        if (s) {
+          const chip = el('button', { type: 'button', class: 'btn btn-ghost mini', text: '✔ ' + s.bairro });
+          chip.addEventListener('click', () => { i.value = s.bairro; refresh(); });
+          sug.append(el('span', { class: 'muted', style: 'font-size:.8rem', text: 'Você quis dizer:' }), chip);
+        }
+        feeNote.innerHTML = 'Taxa de entrega deste bairro: <b>' + money(taxaBairro(i.value, settings)) + '</b>';
+      };
+      i.addEventListener('input', refresh);
+      refresh();
+      return el('label', { class: 'opt-group', style: 'display:block' }, [
+        el('div', { class: 'opt-head' }, el('div', { class: 't', text: 'Bairro' })), i, sug, feeNote,
+      ]);
+    };
+
     if (state.tipo === 'entrega') {
       const ruaNum = el('div', { style: 'display:flex;gap:8px' }, [
         el('div', { style: 'flex:3' }, inp('rua', 'Rua / Avenida')),
@@ -119,7 +144,7 @@ export function openCheckout({ openOrders: ooInicial = 0 } = {}) {
       ]);
       body.append(
         field('Rua e número', ruaNum),
-        field('Bairro', inp('bairro', 'Seu bairro')),
+        bairroField(),
         field('Complemento', inp('complemento', 'Apto, bloco, casa (opcional)')),
         field('Ponto de referência', inp('referencia', 'Perto de... / se condomínio, nome do morador')),
         el('div', { class: 'pill', style: 'margin-top:4px', html: '📍 Cidade <b>&nbsp;Votuporanga/SP</b>' }),

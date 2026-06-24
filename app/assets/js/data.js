@@ -6,7 +6,7 @@
 
 import { CONFIG, hasSupabase } from './config.js';
 import * as SEED from './menu-data.js';
-import { hmToMin, money, phoneCanon } from './util.js';
+import { hmToMin, money, phoneCanon, normBairro, levenshtein } from './util.js';
 
 // Menu/configurações hidratados do Supabase (quando conectado). Senão, usa o seed.
 let MENU = null;
@@ -103,6 +103,37 @@ export function tempoRetirada(openOrders = 0, settings = getSettings()) {
   const cada = Math.max(1, settings.retiradaIncrementoCadaPedidos || settings.tempoIncrementoCadaPedidos || 10);
   const extras = Math.floor(openOrders / cada) * (settings.retiradaIncrementoMin || 0);
   return (settings.retiradaMinutos || 20) + extras;
+}
+
+// ---- Taxa de entrega por bairro (exceções; o resto usa a taxa padrão) ----
+// Acha a EXCEÇÃO que casa com o bairro digitado, tolerante a erro de digitação
+// (ex: "explanada", "bairro esplanada" -> Esplanada).
+export function matchBairro(bairro, settings = getSettings()) {
+  const n = normBairro(bairro);
+  if (!n) return null;
+  for (const e of (settings.taxasBairro || [])) {
+    const en = normBairro(e.bairro);
+    if (!en) continue;
+    if (n === en || levenshtein(n, en) <= 2 || (n.length >= 5 && (n.includes(en) || en.includes(n)))) return e;
+  }
+  return null;
+}
+// Taxa do bairro: a da exceção se casar; senão a taxa padrão.
+export function taxaBairro(bairro, settings = getSettings()) {
+  const m = matchBairro(bairro, settings);
+  return m ? (Number(m.taxa) || 0) : (Number(settings.taxaEntrega) || 0);
+}
+// Sugere o nome certo do bairro quando o cliente digita algo parecido (ou só o começo),
+// pra ele clicar e confirmar. Não sugere quando já está exato.
+export function sugestaoBairro(bairro, settings = getSettings()) {
+  const n = normBairro(bairro);
+  if (n.length < 3) return null;
+  for (const e of (settings.taxasBairro || [])) {
+    const en = normBairro(e.bairro);
+    if (!en || en === n) continue;
+    if (en.startsWith(n) || n.startsWith(en) || levenshtein(n, en) <= 2 || (n.length >= 4 && en.includes(n))) return e;
+  }
+  return null;
 }
 
 // ---- Preços ----
