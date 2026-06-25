@@ -68,7 +68,11 @@ export function openCheckout({ openOrders: ooInicial = 0 } = {}) {
     nome.addEventListener('input', () => state.nome = nome.value);
     // Mascara robusta + escuta 'change' tambem, pra pegar autofill que nao dispara 'input'.
     const aplicaTel = () => { tel.value = maskPhone(tel.value); state.telefone = tel.value; };
-    tel.addEventListener('input', aplicaTel);
+    // Ao APAGAR não re-formata, senão os "()" do DDD travam e não dá pra corrigir o número.
+    tel.addEventListener('input', (e) => {
+      if (e && typeof e.inputType === 'string' && e.inputType.startsWith('delete')) { state.telefone = tel.value; return; }
+      aplicaTel();
+    });
     tel.addEventListener('change', aplicaTel);
     body.append(
       el('div', { class: 'sheet-title', text: 'Pra começar' }),
@@ -275,6 +279,8 @@ export function openCheckout({ openOrders: ooInicial = 0 } = {}) {
           }));
         } catch (e) {}
       }
+      // guarda os itens pra ele "repetir o último pedido" numa próxima visita
+      try { localStorage.setItem('ams_ultimo_pedido', JSON.stringify({ items: cart.getItems(), ts: Date.now() })); } catch (e) {}
       cart.clear();
       showSuccess(res, order);
     } catch (e) {

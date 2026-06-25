@@ -388,6 +388,32 @@ function trackerBar() {
   return bar;
 }
 
+// Banner "Repetir último pedido": aparece quando o cliente já fez um pedido neste
+// aparelho (e não tem pedido em andamento). 1 clique re-monta a sacola e abre.
+function repetirBanner() {
+  if (pedido) return null; // já tem pedido em andamento -> mostra só o tracker
+  let last; try { last = JSON.parse(localStorage.getItem('ams_ultimo_pedido') || 'null'); } catch (e) {}
+  const items = (last && Array.isArray(last.items) ? last.items : []).filter((i) => i && i.precoUnit != null);
+  if (!items.length) return null;
+  const qtd = items.reduce((s, i) => s + (Number(i.qtd) || 1), 0);
+  const total = items.reduce((s, i) => s + (Number(i.precoUnit) || 0) * (Number(i.qtd) || 1), 0);
+  const resumo = items.map((i) => `${Number(i.qtd) || 1}x ${(i.print && i.print.titulo) || i.nome}`).join(', ');
+  const bar = el('button', { class: 'repeat-bar', type: 'button' }, [
+    el('span', { class: 'rb-ico', text: '🔁' }),
+    el('div', { class: 'rb-info' }, [
+      el('div', { class: 'rb-title', text: 'Repetir último pedido' }),
+      el('div', { class: 'rb-sub', text: resumo }),
+    ]),
+    el('span', { class: 'rb-cta', text: money(total) }),
+  ]);
+  bar.addEventListener('click', () => {
+    items.forEach((i) => { cart.add({ ...i }); track.addToCart(i); });
+    toast(`${qtd} ${qtd === 1 ? 'item adicionado' : 'itens adicionados'} à sacola`);
+    openCart();
+  });
+  return bar;
+}
+
 function openTrack() {
   if (!pedido) return;
   const overlay = el('div', { class: 'overlay' });
@@ -480,7 +506,9 @@ function openLogin() {
   const nome = el('input', { style: inStyle, placeholder: 'Seu nome', value: c.nome || '', autocomplete: 'name' });
   const tel = el('input', { style: inStyle, placeholder: '(17) 99999-9999', value: c.telefone || '', type: 'tel', inputmode: 'tel', autocomplete: 'tel' });
   const aplica = () => { tel.value = maskPhone(tel.value); };
-  tel.addEventListener('input', aplica); tel.addEventListener('change', aplica);
+  // Ao APAGAR não re-formata, senão os "()" do DDD travam e não dá pra corrigir o número.
+  tel.addEventListener('input', (e) => { if (e && typeof e.inputType === 'string' && e.inputType.startsWith('delete')) return; aplica(); });
+  tel.addEventListener('change', aplica);
   const msg = el('div', { class: 'sheet-desc', style: 'margin-top:8px;color:var(--magenta)' });
   const btn = el('button', { class: 'btn btn-primary btn-block', style: 'margin-top:16px', text: 'Ver meus pedidos' });
   btn.addEventListener('click', async () => {
@@ -543,6 +571,7 @@ function boot() {
   root.append(header(), hero());
   const tb = trackerBar(); if (tb) root.append(tb);
   const cb = closedBanner(); if (cb) root.append(cb);
+  const rb = repetirBanner(); if (rb) root.append(rb);
   root.append(searchBar(), catNav());
   const main = el('main', { id: 'sections', style: 'padding-bottom:90px' });
   sectionsHost = main; root.append(main, cartBar());
