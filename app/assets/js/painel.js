@@ -748,6 +748,42 @@ function renderConfig() {
   const s = JSON.parse(JSON.stringify(currentSettings()));
   const numRow = (label, val, on, step = '1') => { const i = el('input', { type: 'number', step, value: val }); i.addEventListener('input', () => on(parseFloat(i.value) || 0)); return el('div', { class: 'frow' }, [el('label', { text: label }), i]); };
 
+  // Status manual da loja (abrir mais cedo / fechar emergência). Salva na hora ao tocar.
+  const statusCard = el('div', { class: 'panel-card' }, [
+    el('h3', { text: 'Status da loja agora' }),
+    el('p', { class: 'hint', text: 'Pra abrir mais cedo ou fechar numa emergência. Salva sozinho ao tocar e já vale pro cliente. Em "Automático" a loja segue o horário lá embaixo.' }),
+  ]);
+  const statusBox = el('div');
+  const setStatus = async (val) => {
+    const saved = { ...currentSettings(), statusManual: val };
+    const { error } = await client.from('store_config').upsert({ store_slug: STORE_SLUG, settings: saved, updated_at: new Date().toISOString() });
+    if (error) { toast('Erro ao salvar status'); return; }
+    cfg.settings = saved; s.statusManual = val;
+    toast(val === 'auto' ? 'Modo automático: segue o horário.' : val === 'aberto' ? 'Loja ABERTA agora (manual).' : 'Loja FECHADA agora (manual).');
+    renderStatus();
+  };
+  const renderStatus = () => {
+    statusBox.innerHTML = '';
+    const cur = s.statusManual || 'auto';
+    const opts = [
+      ['auto', '🕒 Automático', 'Segue o horário cadastrado.'],
+      ['aberto', '🟢 Abrir agora', 'Força ABERTA, mesmo fora do horário.'],
+      ['fechado', '🔴 Fechar agora', 'Força FECHADA, mesmo no horário.'],
+    ];
+    statusBox.append(el('div', { class: 'status-opts' }, opts.map(([val, label, desc]) =>
+      el('button', { class: 'status-opt' + (cur === val ? ' active' : ''), type: 'button', onclick: () => setStatus(val) }, [
+        el('div', { class: 'so-label', text: label }),
+        el('div', { class: 'so-desc', text: desc }),
+      ]))));
+    if (cur !== 'auto') {
+      statusBox.append(el('div', { class: 'status-warn', text: cur === 'aberto'
+        ? '⚠️ Modo manual: a loja está ABERTA e NÃO segue o horário. Toque em Automático pra voltar ao normal.'
+        : '⚠️ Modo manual: a loja está FECHADA e NÃO segue o horário. Toque em Automático pra voltar ao normal.' }));
+    }
+  };
+  renderStatus();
+  statusCard.append(statusBox);
+
   const ops = el('div', { class: 'panel-card' }, [el('h3', { text: 'Entrega e tempo' }), el('p', { class: 'hint', text: 'Tudo aqui reflete na hora pro cliente.' }),
     numRow('Taxa de entrega (R$)', s.taxaEntrega, (v) => s.taxaEntrega = v, '0.50'),
     numRow('Pedido mínimo (R$, 0 = sem)', s.pedidoMinimo, (v) => s.pedidoMinimo = v, '1'),
@@ -805,7 +841,7 @@ function renderConfig() {
     cfg.settings = s; toast('Configurações salvas. Já valem pro cliente.'); e.target.disabled = false;
   } });
 
-  host.append(ops, bairroCard, pays, hours, save);
+  host.append(statusCard, ops, bairroCard, pays, hours, save);
 }
 
 // ---------------------------------------------------------------- Acessos (logins do painel)

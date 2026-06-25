@@ -58,13 +58,17 @@ function hero() {
     el('img', { class: 'hero-logo', src: 'assets/img/logo.png', alt: 'Açaí Mais Sabor' }),
     el('h1', { class: 'hero-h1', text: 'O Açaí oficial de Votuporanga' }),
     el('p', { class: 'hero-sub', text: 'Feito com propósito, entregue com carinho e tem o Sabor que fala por si!' }),
-    el('div', { class: 'hero-status' }, el('span', { class: 'pill ' + (aberto ? 'pill-ok' : 'pill-closed') }, [el('span', { class: 'dot' }), aberto ? 'Aberto agora' : `Fechado, abre ${nextOpenLabel(settings) || 'em breve'}`])),
+    el('div', { class: 'hero-status' }, el('span', { class: 'pill ' + (aberto ? 'pill-ok' : 'pill-closed') }, [el('span', { class: 'dot' }), aberto ? 'Aberto agora' : (nextOpenLabel(settings) ? `Fechado, abre ${nextOpenLabel(settings)}` : 'Fechado no momento')])),
   ]));
 }
 
 function closedBanner() {
   if (isOpenNow(settings)) return null;
-  return el('div', { class: 'closed-banner', html: `Estamos fechados. Você pode montar o pedido, abrimos <b>${nextOpenLabel(settings) || 'em breve'}</b>.` });
+  const label = nextOpenLabel(settings);
+  const html = label
+    ? `Estamos fechados. Você pode montar o pedido, abrimos <b>${label}</b>.`
+    : 'Estamos fechados no momento. Você pode montar o pedido e enviar quando reabrirmos.';
+  return el('div', { class: 'closed-banner', html });
 }
 
 let searchTimer;

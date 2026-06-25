@@ -16,6 +16,7 @@ export const STORE = {
 
 // Configurações operacionais (tudo editável no painel, reflete em tempo real)
 export const SETTINGS = {
+  statusManual: 'auto',      // 'auto' segue o horário | 'aberto' força aberta | 'fechado' força fechada
   taxaEntrega: 8.0,          // taxa padrão de entrega
   taxasBairro: [],           // exceções por bairro: [{ bairro: 'Esplanada', taxa: 12 }] (o resto usa a padrão)
   pedidoMinimo: 0,           // 0 = sem mínimo

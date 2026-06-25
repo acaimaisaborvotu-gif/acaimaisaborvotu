@@ -345,6 +345,15 @@ textarea.obs:focus { border-color: var(--magenta); }
 .order-track .ot-status { font-size: 1.02rem; font-weight: 900; line-height: 1.2; }
 .order-track .ot-cta { flex: 0 0 auto; font-weight: 800; font-size: .9rem; background: rgba(255, 255, 255, .18); padding: 7px 12px; border-radius: 999px; }
 
+/* ---- Painel: status manual da loja (abrir/fechar) ---- */
+.status-opts { display: flex; gap: 8px; flex-wrap: wrap; }
+.status-opt { flex: 1; min-width: 150px; text-align: left; padding: 11px 13px; border-radius: var(--r-md); border: 1.5px solid var(--line); background: var(--surface); cursor: pointer; transition: border-color .15s, background .15s; }
+.status-opt:active { transform: scale(.99); }
+.status-opt.active { border-color: var(--magenta); background: var(--surface-2); box-shadow: var(--sh-1); }
+.status-opt .so-label { font-weight: 800; font-size: .96rem; color: var(--ink); }
+.status-opt .so-desc { font-size: .76rem; color: var(--ink-soft); margin-top: 2px; }
+.status-warn { margin-top: 12px; padding: 10px 13px; border-radius: var(--r-md); background: #fff4e5; color: #8a4b00; font-size: .82rem; font-weight: 700; line-height: 1.35; }
+
 /* ---- Banner "Repetir último pedido" ---- */
 .repeat-bar { display: flex; align-items: center; gap: 12px; margin: 12px 16px 0; padding: 12px 14px; width: calc(100% - 32px); border: none; border-radius: var(--r-md); background: var(--grad-marca); color: #fff; box-shadow: var(--sh-2); cursor: pointer; text-align: left; font: inherit; }
 .repeat-bar:active { transform: scale(.99); }

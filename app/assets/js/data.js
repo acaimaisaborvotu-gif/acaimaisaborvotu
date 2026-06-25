@@ -57,6 +57,9 @@ export function getSettings() {
 
 // ---- Horário de funcionamento ----
 export function isOpenNow(settings = getSettings(), now = new Date()) {
+  // Override manual do painel (abrir mais cedo / fechar numa emergência).
+  if (settings.statusManual === 'aberto') return true;
+  if (settings.statusManual === 'fechado') return false;
   const h = settings.horarios?.[now.getDay()];
   if (!h) return false;
   const mins = now.getHours() * 60 + now.getMinutes();
@@ -64,6 +67,8 @@ export function isOpenNow(settings = getSettings(), now = new Date()) {
   return fecha > abre ? mins >= abre && mins < fecha : mins >= abre || mins < fecha;
 }
 export function nextOpenLabel(settings = getSettings(), now = new Date()) {
+  // Fechamento manual não tem previsão de reabertura (o dono reabre quando quiser).
+  if (settings.statusManual === 'fechado' || settings.statusManual === 'aberto') return null;
   const mins = now.getHours() * 60 + now.getMinutes();
   for (let i = 0; i < 7; i++) {
     const d = (now.getDay() + i) % 7;
