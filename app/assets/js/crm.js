@@ -131,14 +131,19 @@ async function openDrawer(c) {
   document.body.style.overflow = 'hidden'; requestAnimationFrame(() => overlay.classList.add('show'));
   overlay.addEventListener('click', (e) => { if (e.target === overlay) destroy(); });
 
-  const ticket = c.orders_count ? c.total_spent / c.orders_count : 0;
+  const badgeOrders = el('span', { class: 'pill' });
+  const badgeTotal = el('span', { class: 'pill' });
+  const badgeTicket = el('span', { class: 'pill' });
+  const updatePills = () => {
+    const ticket = c.orders_count ? c.total_spent / c.orders_count : 0;
+    badgeOrders.textContent = `${c.orders_count} pedidos`;
+    badgeTotal.textContent = 'Total ' + money(c.total_spent);
+    badgeTicket.textContent = 'Ticket ' + money(ticket);
+  };
+  updatePills();
   body.append(
     el('a', { class: 'btn btn-whats btn-block', href: wa(c.phone, fill(template('inativo'), c.name)), target: '_blank', rel: 'noopener', html: '💬 Mandar WhatsApp' }),
-    el('div', { class: 'crm-badges', style: 'margin:12px 0' }, [
-      el('span', { class: 'pill', text: `${c.orders_count} pedidos` }),
-      el('span', { class: 'pill', text: 'Total ' + money(c.total_spent) }),
-      el('span', { class: 'pill', text: 'Ticket ' + money(ticket) }),
-    ]),
+    el('div', { class: 'crm-badges', style: 'margin:12px 0' }, [badgeOrders, badgeTotal, badgeTicket]),
   );
   const optInput = el('input', { type: 'checkbox' }); optInput.checked = !!c.opt_out;
   optInput.addEventListener('change', async () => { await rpc('crm_set_opt_out', { p_store: _store, p_phone: c.phone, p_value: optInput.checked }); c.opt_out = optInput.checked; toast('Salvo'); });
@@ -146,18 +151,41 @@ async function openDrawer(c) {
 
   const hist = el('div', {}, el('p', { class: 'hint', text: 'Carregando histórico...' }));
   body.append(hist);
-  const pedidos = await rpc('crm_customer_orders', { p_store: _store, p_phone: c.phone, p_limit: 30, p_offset: 0 });
-  hist.innerHTML = '';
-  if (!pedidos.length) { hist.append(el('p', { class: 'hint', text: 'Sem pedidos registrados.' })); return; }
-  pedidos.forEach((o) => {
-    const data = (() => { try { return new Date(o.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' }); } catch (e) { return ''; } })();
-    const itens = (o.items || []).map((i) => `${i.qtd}x ${i.nome}`).join(', ');
-    hist.append(el('div', { class: 'opt-group', style: 'margin-bottom:8px' }, [
-      el('div', { style: 'display:flex;justify-content:space-between;gap:8px' }, [el('b', { text: `#${String(o.daily_number || 0).padStart(3, '0')} · ${data}` }), el('span', { class: 'oprice', style: 'flex:none', text: money(o.total) })]),
-      itens ? el('small', { class: 'muted', style: 'display:block;margin-top:3px', text: itens }) : null,
-      o.coupon ? el('small', { class: 'muted', style: 'display:block', text: 'Cupom: ' + o.coupon }) : null,
-    ]));
-  });
+
+  // Cancela um pedido pelo CRM (inclusive já entregue): sai do faturamento e do total do cliente.
+  const cancelarPedido = async (o) => {
+    const num = '#' + String(o.daily_number || 0).padStart(3, '0');
+    if (!confirm(`Cancelar o pedido ${num} de ${c.name || c.phone}? Ele sai do faturamento e do total gasto do cliente.`)) return;
+    const { error } = await _client.from('orders').update({ status: 'cancelado' }).eq('id', o.id);
+    if (error) { toast('Erro ao cancelar'); return; }
+    c.total_spent = Math.max(0, (Number(c.total_spent) || 0) - (Number(o.total) || 0));
+    c.orders_count = Math.max(0, (Number(c.orders_count) || 0) - 1);
+    updatePills();
+    toast(`Pedido ${num} cancelado. Saiu do faturamento.`);
+    loadHist();
+  };
+
+  const loadHist = async () => {
+    hist.innerHTML = ''; hist.append(el('p', { class: 'hint', text: 'Carregando histórico...' }));
+    const pedidos = await rpc('crm_customer_orders', { p_store: _store, p_phone: c.phone, p_limit: 30, p_offset: 0 });
+    hist.innerHTML = '';
+    if (!pedidos.length) { hist.append(el('p', { class: 'hint', text: 'Sem pedidos registrados.' })); return; }
+    pedidos.forEach((o) => {
+      const data = (() => { try { return new Date(o.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' }); } catch (e) { return ''; } })();
+      const itens = (o.items || []).map((i) => `${i.qtd}x ${i.nome}`).join(', ');
+      const cancelado = o.status === 'cancelado';
+      hist.append(el('div', { class: 'opt-group', style: 'margin-bottom:8px' + (cancelado ? ';opacity:.55' : '') }, [
+        el('div', { style: 'display:flex;justify-content:space-between;gap:8px;align-items:center' }, [el('b', { text: `#${String(o.daily_number || 0).padStart(3, '0')} · ${data}` }), el('span', { class: 'oprice', style: 'flex:none', text: money(o.total) })]),
+        itens ? el('small', { class: 'muted', style: 'display:block;margin-top:3px', text: itens }) : null,
+        o.coupon ? el('small', { class: 'muted', style: 'display:block', text: 'Cupom: ' + o.coupon }) : null,
+        el('div', { style: 'margin-top:6px' },
+          cancelado
+            ? el('span', { class: 'pill', style: 'background:rgba(224,62,62,.12);color:var(--danger)', text: 'Cancelado' })
+            : el('button', { class: 'btn btn-ghost mini', style: 'color:var(--danger)', text: 'Cancelar pedido', onclick: () => cancelarPedido(o) })),
+      ]));
+    });
+  };
+  loadHist();
 }
 
 // ---------------------------------------------------------------- Abandonos
