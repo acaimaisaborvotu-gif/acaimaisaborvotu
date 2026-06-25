@@ -56,10 +56,22 @@ export function getSettings() {
 }
 
 // ---- Horário de funcionamento ----
+// Data de hoje no fuso de São Paulo ('YYYY-MM-DD'), pra saber se o override é de hoje.
+const spDate = (d = new Date()) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(d);
+
+// Override manual EFETIVO: 'aberto'/'fechado' só vale no dia em que foi ligado. No dia
+// seguinte expira sozinho e volta pra 'auto' (a loja segue o horário cadastrado de novo).
+export function statusManualEfetivo(settings = getSettings(), now = new Date()) {
+  const st = settings.statusManual;
+  if (st !== 'aberto' && st !== 'fechado') return 'auto';
+  if (settings.statusManualDia && settings.statusManualDia !== spDate(now)) return 'auto';
+  return st;
+}
+
 export function isOpenNow(settings = getSettings(), now = new Date()) {
-  // Override manual do painel (abrir mais cedo / fechar numa emergência).
-  if (settings.statusManual === 'aberto') return true;
-  if (settings.statusManual === 'fechado') return false;
+  const m = statusManualEfetivo(settings, now); // abrir mais cedo / fechar emergência (só hoje)
+  if (m === 'aberto') return true;
+  if (m === 'fechado') return false;
   const h = settings.horarios?.[now.getDay()];
   if (!h) return false;
   const mins = now.getHours() * 60 + now.getMinutes();
@@ -67,8 +79,8 @@ export function isOpenNow(settings = getSettings(), now = new Date()) {
   return fecha > abre ? mins >= abre && mins < fecha : mins >= abre || mins < fecha;
 }
 export function nextOpenLabel(settings = getSettings(), now = new Date()) {
-  // Fechamento manual não tem previsão de reabertura (o dono reabre quando quiser).
-  if (settings.statusManual === 'fechado' || settings.statusManual === 'aberto') return null;
+  // Override manual de hoje não usa a previsão do horário (já expira sozinho amanhã).
+  if (statusManualEfetivo(settings, now) !== 'auto') return null;
   const mins = now.getHours() * 60 + now.getMinutes();
   for (let i = 0; i < 7; i++) {
     const d = (now.getDay() + i) % 7;

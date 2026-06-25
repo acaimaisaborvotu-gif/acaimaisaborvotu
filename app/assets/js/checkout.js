@@ -149,7 +149,7 @@ export function openCheckout({ openOrders: ooInicial = 0 } = {}) {
       body.append(
         field('Rua e número', ruaNum),
         bairroField(),
-        field('Complemento', inp('complemento', 'Apto, bloco, casa (opcional)')),
+        field('Complemento', inp('complemento', 'Apto, bloco, casa, condomínio (opcional)')),
         field('Ponto de referência', inp('referencia', 'Perto de... / se condomínio, nome do morador')),
         el('div', { class: 'pill', style: 'margin-top:4px', html: '📍 Cidade <b>&nbsp;Votuporanga/SP</b>' }),
         el('div', { class: 'muted', style: 'font-size:.8rem;margin-top:6px', text: 'Entregas somente para Votuporanga/SP.' }),

@@ -5,7 +5,7 @@
 // =============================================================================
 
 import { CONFIG, hasSupabase } from './config.js';
-import { sb } from './data.js';
+import { sb, statusManualEfetivo } from './data.js';
 import { printer } from './printing.js';
 import * as SEED from './menu-data.js';
 import { el, money, toast, escapeHtml, imgUrl } from './util.js';
@@ -32,8 +32,9 @@ const STATUS = {
   pronto: { label: 'Pronto', next: 'saiu', action: 'Saiu para entrega' },
   saiu: { label: 'Saiu para entrega', next: 'entregue', action: 'Marcar entregue' },
   entregue: { label: 'Entregue', next: null, action: null },
+  cancelado: { label: 'Cancelado', next: null, action: null },
 };
-const STATUS_COLOR = { novo: 'var(--magenta)', aceito: 'var(--warn)', producao: '#c98a00', pronto: 'var(--ok)', saiu: 'var(--roxo-600)', entregue: 'var(--ink-mute)' };
+const STATUS_COLOR = { novo: 'var(--magenta)', aceito: 'var(--warn)', producao: '#c98a00', pronto: 'var(--ok)', saiu: 'var(--roxo-600)', entregue: 'var(--ink-mute)', cancelado: 'var(--danger)' };
 
 // Próximo passo do pedido. Retirada pula "saiu para entrega" (vai de Pronto direto pra Retirado).
 function nextStep(o) {
@@ -234,7 +235,9 @@ function orderCard(o) {
     ]),
     el('div', { class: 'oactions' }, [
       el('button', { class: 'btn btn-ghost mini', style: 'flex:0 0 auto', html: '🖨', title: 'Reimprimir', onclick: () => doPrint(o) }),
-      nextStep(o) ? el('button', { class: 'btn btn-primary', text: nextStep(o).action, onclick: () => advance(o) }) : el('span', { class: 'muted', style: 'flex:1;text-align:center', text: 'Pedido finalizado' }),
+      !['entregue', 'cancelado'].includes(o.status)
+        ? el('button', { class: 'btn btn-ghost mini', style: 'flex:0 0 auto;color:var(--danger)', text: 'Cancelar', title: 'Cancelar pedido', onclick: () => cancelOrder(o) }) : null,
+      nextStep(o) ? el('button', { class: 'btn btn-primary', text: nextStep(o).action, onclick: () => advance(o) }) : el('span', { class: 'muted', style: 'flex:1;text-align:center', text: o.status === 'cancelado' ? 'Pedido cancelado' : 'Pedido finalizado' }),
     ]),
   ]);
   return card;
@@ -248,6 +251,17 @@ async function advance(o) {
   const { error } = await client.from('orders').update(patch).eq('id', o.id);
   if (error) return toast('Erro ao atualizar');
   o.status = ns.next; renderOrders();
+}
+
+// Cancela o pedido (erro no pedido ou cliente desistiu). Pede confirmação porque
+// o cliente passa a ver "cancelado" no acompanhamento e sai do faturamento.
+async function cancelOrder(o) {
+  const num = '#' + String(o.daily_number || 0).padStart(3, '0');
+  if (!confirm(`Cancelar o pedido ${num}? O cliente vai ver como cancelado e ele sai do faturamento.`)) return;
+  const { error } = await client.from('orders').update({ status: 'cancelado' }).eq('id', o.id);
+  if (error) return toast('Erro ao cancelar');
+  o.status = 'cancelado'; renderOrders();
+  toast(`Pedido ${num} cancelado`);
 }
 
 async function doPrint(o) {
@@ -751,24 +765,25 @@ function renderConfig() {
   // Status manual da loja (abrir mais cedo / fechar emergência). Salva na hora ao tocar.
   const statusCard = el('div', { class: 'panel-card' }, [
     el('h3', { text: 'Status da loja agora' }),
-    el('p', { class: 'hint', text: 'Pra abrir mais cedo ou fechar numa emergência. Salva sozinho ao tocar e já vale pro cliente. Em "Automático" a loja segue o horário lá embaixo.' }),
+    el('p', { class: 'hint', text: 'Pra abrir mais cedo ou fechar numa emergência. Vale só por HOJE: amanhã a loja volta pro horário normal sozinha. Salva ao tocar e já vale pro cliente.' }),
   ]);
   const statusBox = el('div');
   const setStatus = async (val) => {
-    const saved = { ...currentSettings(), statusManual: val };
+    const hojeSP = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+    const saved = { ...currentSettings(), statusManual: val, statusManualDia: val === 'auto' ? null : hojeSP };
     const { error } = await client.from('store_config').upsert({ store_slug: STORE_SLUG, settings: saved, updated_at: new Date().toISOString() });
     if (error) { toast('Erro ao salvar status'); return; }
-    cfg.settings = saved; s.statusManual = val;
-    toast(val === 'auto' ? 'Modo automático: segue o horário.' : val === 'aberto' ? 'Loja ABERTA agora (manual).' : 'Loja FECHADA agora (manual).');
+    cfg.settings = saved; s.statusManual = val; s.statusManualDia = saved.statusManualDia;
+    toast(val === 'auto' ? 'Modo automático: segue o horário.' : val === 'aberto' ? 'Loja ABERTA só por hoje.' : 'Loja FECHADA só por hoje.');
     renderStatus();
   };
   const renderStatus = () => {
     statusBox.innerHTML = '';
-    const cur = s.statusManual || 'auto';
+    const cur = statusManualEfetivo(s); // já considera a expiração (ontem -> volta pro automático)
     const opts = [
       ['auto', '🕒 Automático', 'Segue o horário cadastrado.'],
-      ['aberto', '🟢 Abrir agora', 'Força ABERTA, mesmo fora do horário.'],
-      ['fechado', '🔴 Fechar agora', 'Força FECHADA, mesmo no horário.'],
+      ['aberto', '🟢 Abrir agora', 'Força ABERTA só hoje (amanhã volta ao normal).'],
+      ['fechado', '🔴 Fechar agora', 'Força FECHADA só hoje (amanhã volta ao normal).'],
     ];
     statusBox.append(el('div', { class: 'status-opts' }, opts.map(([val, label, desc]) =>
       el('button', { class: 'status-opt' + (cur === val ? ' active' : ''), type: 'button', onclick: () => setStatus(val) }, [
@@ -777,8 +792,8 @@ function renderConfig() {
       ]))));
     if (cur !== 'auto') {
       statusBox.append(el('div', { class: 'status-warn', text: cur === 'aberto'
-        ? '⚠️ Modo manual: a loja está ABERTA e NÃO segue o horário. Toque em Automático pra voltar ao normal.'
-        : '⚠️ Modo manual: a loja está FECHADA e NÃO segue o horário. Toque em Automático pra voltar ao normal.' }));
+        ? '⚠️ Aberta no manual só por HOJE. Amanhã volta pro horário normal sozinha (ou toque em Automático pra normalizar agora).'
+        : '⚠️ Fechada no manual só por HOJE. Amanhã volta pro horário normal sozinha (ou toque em Automático pra normalizar agora).' }));
     }
   };
   renderStatus();
