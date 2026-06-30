@@ -192,25 +192,121 @@ function renderApp() {
   }[tab])();
 }
 
+// Controle de status da loja (abrir/fechar/automático). Fica no topo da aba Pedidos,
+// então DONO e OPERADOR conseguem usar (a RLS de store_config já é is_staff). Salva na hora.
+function lojaStatusControl() {
+  const card = el('div', { class: 'panel-card' }, [
+    el('h3', { text: 'Status da loja agora' }),
+    el('p', { class: 'hint', text: 'Abrir mais cedo ou fechar numa emergência. Vale só por HOJE: amanhã volta pro horário normal sozinha. Salva ao tocar.' }),
+  ]);
+  const box = el('div'); card.append(box);
+  const setStatus = async (val) => {
+    const hojeSP = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+    const saved = { ...currentSettings(), statusManual: val, statusManualDia: val === 'auto' ? null : hojeSP };
+    const { error } = await client.from('store_config').upsert({ store_slug: STORE_SLUG, settings: saved, updated_at: new Date().toISOString() });
+    if (error) { toast('Erro ao salvar status'); return; }
+    cfg.settings = saved;
+    toast(val === 'auto' ? 'Modo automático: segue o horário.' : val === 'aberto' ? 'Loja ABERTA só por hoje.' : 'Loja FECHADA só por hoje.');
+    render();
+  };
+  const render = () => {
+    box.innerHTML = '';
+    const cur = statusManualEfetivo(currentSettings());
+    const opts = [
+      ['auto', '🕒 Automático', 'Segue o horário cadastrado.'],
+      ['aberto', '🟢 Abrir agora', 'Força ABERTA só hoje.'],
+      ['fechado', '🔴 Fechar agora', 'Força FECHADA só hoje.'],
+    ];
+    box.append(el('div', { class: 'status-opts' }, opts.map(([val, label, desc]) =>
+      el('button', { class: 'status-opt' + (cur === val ? ' active' : ''), type: 'button', onclick: () => setStatus(val) }, [
+        el('div', { class: 'so-label', text: label }),
+        el('div', { class: 'so-desc', text: desc }),
+      ]))));
+    if (cur !== 'auto') box.append(el('div', { class: 'status-warn', text: cur === 'aberto'
+      ? '⚠️ Aberta no manual só por HOJE. Amanhã volta ao normal sozinha (ou toque em Automático).'
+      : '⚠️ Fechada no manual só por HOJE. Amanhã volta ao normal sozinha (ou toque em Automático).' }));
+  };
+  render();
+  return card;
+}
+
+// Relatório de vendas do dia: monta os números a partir dos pedidos de HOJE (fuso SP).
+// Zera sozinho a cada dia porque só conta os pedidos do dia atual.
+function buildReportData() {
+  const fmt = (dt) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(dt);
+  const hoje = fmt(new Date());
+  const doDia = orders.filter((o) => { try { return fmt(new Date(o.created_at)) === hoje; } catch (e) { return false; } });
+  const vendas = doDia.filter((o) => o.status !== 'cancelado');
+  const cancelados = doDia.filter((o) => o.status === 'cancelado');
+  const vendaComTaxa = vendas.reduce((s, o) => s + Number(o.total || 0), 0);
+  const taxaTotal = vendas.reduce((s, o) => s + Number(o.delivery_fee || 0), 0);
+  const hora = (o) => { try { return new Date(o.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; } };
+  const mapO = (o) => ({ num: o.daily_number || 0, hora: hora(o), total: Number(o.total || 0) });
+  return {
+    dataLabel: new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
+    vendas: vendas.map(mapO), cancelados: cancelados.map(mapO),
+    vendaSemTaxa: vendaComTaxa - taxaTotal, vendaComTaxa, taxaTotal,
+  };
+}
+
+function renderReport(host) {
+  const r = buildReportData();
+  const kpi = (lbl, val, mod) => el('div', { class: 'kpi' + (mod ? ' kpi-' + mod : '') }, [el('div', { class: 'kpi-val', text: val }), el('div', { class: 'kpi-lbl', text: lbl })]);
+  const card = el('div', { class: 'panel-card' });
+  card.append(el('div', { style: 'display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap' }, [
+    el('h3', { text: 'Relatório do dia · ' + r.dataLabel, style: 'margin:0' }),
+    el('button', { class: 'btn btn-primary mini', html: '🖨 Imprimir', onclick: async (e) => {
+      e.target.disabled = true;
+      try { await printer.printReport(buildReportData(), store); toast('Relatório enviado pra impressora'); }
+      catch (err) { toast('Falha ao imprimir: ' + (err.message || '')); }
+      e.target.disabled = false;
+    } }),
+  ]));
+  card.append(el('div', { class: 'kpi-grid', style: 'margin-top:12px' }, [
+    kpi('Venda (produtos)', money(r.vendaSemTaxa), 'principal'),
+    kpi('Taxa de entrega', money(r.taxaTotal)),
+    kpi('Total recebido', money(r.vendaComTaxa)),
+    kpi('Pedidos', String(r.vendas.length)),
+  ]));
+  const lista = el('div', { class: 'rank', style: 'margin-top:14px' });
+  if (!r.vendas.length) lista.append(el('p', { class: 'hint', text: 'Nenhum pedido hoje ainda.' }));
+  r.vendas.forEach((o) => lista.append(el('div', { class: 'rank-item' }, el('div', { class: 'rank-head' }, [
+    el('span', { text: '#' + String(o.num).padStart(3, '0') + ' · ' + o.hora }), el('b', { text: money(o.total) }),
+  ]))));
+  card.append(lista);
+  if (r.cancelados.length) {
+    const cancVal = r.cancelados.reduce((s, o) => s + o.total, 0);
+    card.append(el('h3', { text: 'Cancelados (' + r.cancelados.length + ') · ' + money(cancVal), style: 'margin-top:16px;color:var(--danger)' }));
+    const cl = el('div', { class: 'rank' });
+    r.cancelados.forEach((o) => cl.append(el('div', { class: 'rank-item', style: 'opacity:.6' }, el('div', { class: 'rank-head' }, [
+      el('span', { text: '#' + String(o.num).padStart(3, '0') + ' · ' + o.hora }), el('b', { text: money(o.total) }),
+    ]))));
+    card.append(cl);
+  }
+  host.append(card);
+}
+
 // ---------------------------------------------------------------- Pedidos
 function renderOrders() {
   if (tab !== 'pedidos') return;
   const host = document.getElementById('tabContent'); if (!host) return;
   host.innerHTML = '';
-  const filters = [['ativos', 'Em andamento'], ['novo', 'Novos'], ['producao', 'Em produção'], ['pronto', 'Prontos'], ['saiu', 'Saíram'], ['entregue', 'Entregues'], ['todos', 'Todos']];
+  host.append(lojaStatusControl());
+  const filters = [['ativos', 'Em andamento'], ['novo', 'Novos'], ['producao', 'Em produção'], ['pronto', 'Prontos'], ['saiu', 'Saíram'], ['entregue', 'Entregues'], ['todos', 'Todos'], ['relatorio', 'Relatório do dia']];
   host.append(el('div', { class: 'pn-filters' }, filters.map(([id, label]) => {
     const b = el('button', { class: id === filter ? 'active' : '', text: label });
     b.addEventListener('click', () => { filter = id; renderOrders(); });
     return b;
   })));
+  // atualiza badge do tab
+  const badge = document.querySelector('.pn-tabs button[data-tab=pedidos] .badge'); const n = orders.filter((o) => o.status === 'novo').length;
+  if (badge) badge.textContent = n || '';
+  if (filter === 'relatorio') { renderReport(host); return; }
   let list = orders;
   if (filter === 'ativos') list = orders.filter((o) => !['entregue', 'cancelado'].includes(o.status));
   else if (filter !== 'todos') list = orders.filter((o) => o.status === filter);
   if (!list.length) { host.append(el('div', { class: 'empty' }, [el('div', { class: 'big', text: '🍧' }), el('p', { text: 'Nenhum pedido aqui.' })])); return; }
   host.append(el('div', { class: 'orders' }, list.map(orderCard)));
-  // atualiza badge do tab
-  const badge = document.querySelector('.pn-tabs button[data-tab=pedidos] .badge'); const n = orders.filter((o) => o.status === 'novo').length;
-  if (badge) badge.textContent = n || '';
 }
 
 function orderCard(o) {
@@ -225,6 +321,13 @@ function orderCard(o) {
       el('div', { class: 'ocust', text: o.customer_name }),
       el('div', { class: 'oinfo', text: `${o.customer_phone} · ${o.delivery_type === 'retirada' ? 'Retirada' : 'Entrega'}` }),
       o.address ? el('div', { class: 'oinfo', text: '📍 ' + o.address }) : null,
+      (() => {
+        const tempo = o.eta_max || o.eta_min;
+        if (!tempo || ['entregue', 'cancelado'].includes(o.status)) return null;
+        const lim = new Date(new Date(o.created_at).getTime() + Number(tempo) * 60000);
+        const hhmm = String(lim.getHours()).padStart(2, '0') + 'h' + String(lim.getMinutes()).padStart(2, '0');
+        return el('div', { class: 'oeta', text: (o.delivery_type === 'retirada' ? '⏱ Pronto até ' : '⏱ Entrega até ') + hhmm });
+      })(),
       el('div', { class: 'oitems' }, (o.items || []).map((it) => el('div', { class: 'it', html: `<b>${it.qtd}x ${escapeHtml(it.nome)}</b>${it.detalhes?.length ? `<small>${escapeHtml(it.detalhes.join(', '))}</small>` : ''}` }))),
       el('div', { style: 'display:flex;gap:8px;align-items:center;flex-wrap:wrap' }, [
         el('span', { class: 'tag-pay', text: ({ pix: 'PIX', cartao: 'Cartão', dinheiro: 'Dinheiro' }[o.payment_method] || o.payment_method || '') + (o.payment_method === 'dinheiro' && o.change_for ? ` (troco p/ R$ ${o.change_for})` : '') }),
@@ -762,43 +865,6 @@ function renderConfig() {
   const s = JSON.parse(JSON.stringify(currentSettings()));
   const numRow = (label, val, on, step = '1') => { const i = el('input', { type: 'number', step, value: val }); i.addEventListener('input', () => on(parseFloat(i.value) || 0)); return el('div', { class: 'frow' }, [el('label', { text: label }), i]); };
 
-  // Status manual da loja (abrir mais cedo / fechar emergência). Salva na hora ao tocar.
-  const statusCard = el('div', { class: 'panel-card' }, [
-    el('h3', { text: 'Status da loja agora' }),
-    el('p', { class: 'hint', text: 'Pra abrir mais cedo ou fechar numa emergência. Vale só por HOJE: amanhã a loja volta pro horário normal sozinha. Salva ao tocar e já vale pro cliente.' }),
-  ]);
-  const statusBox = el('div');
-  const setStatus = async (val) => {
-    const hojeSP = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
-    const saved = { ...currentSettings(), statusManual: val, statusManualDia: val === 'auto' ? null : hojeSP };
-    const { error } = await client.from('store_config').upsert({ store_slug: STORE_SLUG, settings: saved, updated_at: new Date().toISOString() });
-    if (error) { toast('Erro ao salvar status'); return; }
-    cfg.settings = saved; s.statusManual = val; s.statusManualDia = saved.statusManualDia;
-    toast(val === 'auto' ? 'Modo automático: segue o horário.' : val === 'aberto' ? 'Loja ABERTA só por hoje.' : 'Loja FECHADA só por hoje.');
-    renderStatus();
-  };
-  const renderStatus = () => {
-    statusBox.innerHTML = '';
-    const cur = statusManualEfetivo(s); // já considera a expiração (ontem -> volta pro automático)
-    const opts = [
-      ['auto', '🕒 Automático', 'Segue o horário cadastrado.'],
-      ['aberto', '🟢 Abrir agora', 'Força ABERTA só hoje (amanhã volta ao normal).'],
-      ['fechado', '🔴 Fechar agora', 'Força FECHADA só hoje (amanhã volta ao normal).'],
-    ];
-    statusBox.append(el('div', { class: 'status-opts' }, opts.map(([val, label, desc]) =>
-      el('button', { class: 'status-opt' + (cur === val ? ' active' : ''), type: 'button', onclick: () => setStatus(val) }, [
-        el('div', { class: 'so-label', text: label }),
-        el('div', { class: 'so-desc', text: desc }),
-      ]))));
-    if (cur !== 'auto') {
-      statusBox.append(el('div', { class: 'status-warn', text: cur === 'aberto'
-        ? '⚠️ Aberta no manual só por HOJE. Amanhã volta pro horário normal sozinha (ou toque em Automático pra normalizar agora).'
-        : '⚠️ Fechada no manual só por HOJE. Amanhã volta pro horário normal sozinha (ou toque em Automático pra normalizar agora).' }));
-    }
-  };
-  renderStatus();
-  statusCard.append(statusBox);
-
   const ops = el('div', { class: 'panel-card' }, [el('h3', { text: 'Entrega e tempo' }), el('p', { class: 'hint', text: 'Tudo aqui reflete na hora pro cliente.' }),
     numRow('Taxa de entrega (R$)', s.taxaEntrega, (v) => s.taxaEntrega = v, '0.50'),
     numRow('Pedido mínimo (R$, 0 = sem)', s.pedidoMinimo, (v) => s.pedidoMinimo = v, '1'),
@@ -851,12 +917,15 @@ function renderConfig() {
 
   const save = el('button', { class: 'btn btn-primary', style: 'margin:6px 0 30px', text: 'Salvar configurações', onclick: async (e) => {
     e.target.disabled = true;
-    const { error } = await client.from('store_config').upsert({ store_slug: STORE_SLUG, settings: s, updated_at: new Date().toISOString() });
+    // Preserva o status manual (controlado na aba Pedidos) pra este Salvar não sobrescrever.
+    const fresh = currentSettings();
+    const settings = { ...s, statusManual: fresh.statusManual, statusManualDia: fresh.statusManualDia };
+    const { error } = await client.from('store_config').upsert({ store_slug: STORE_SLUG, settings, updated_at: new Date().toISOString() });
     if (error) { toast('Erro ao salvar'); e.target.disabled = false; return; }
-    cfg.settings = s; toast('Configurações salvas. Já valem pro cliente.'); e.target.disabled = false;
+    cfg.settings = settings; toast('Configurações salvas. Já valem pro cliente.'); e.target.disabled = false;
   } });
 
-  host.append(statusCard, ops, bairroCard, pays, hours, save);
+  host.append(ops, bairroCard, pays, hours, save);
 }
 
 // ---------------------------------------------------------------- Acessos (logins do painel)

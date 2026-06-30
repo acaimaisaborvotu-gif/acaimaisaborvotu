@@ -55,7 +55,13 @@ export function deliveryTicket(order, store) {
   t.line('Tel: ' + order.customer_phone);
   if (!retirada && order.address) { t.bold(true); wrap('End: ' + order.address).forEach((l) => t.line(l)); t.bold(false); } // endereço em negrito p/ o entregador ler fácil
   else if (retirada && order.address) wrap(order.address).forEach((l) => t.line(l)); // na retirada o address carrega a observação do cliente
+  // Itens com valor unitario (pra cobrar por copo / dividir a conta). 1 linha por item.
   t.bold(true).line('Itens na sacola: ' + totalItens).bold(false);
+  (order.items || []).forEach((it) => {
+    const q = it.qtd || 1;
+    const right = money(it.precoUnit) + (q > 1 ? ' c/u' : '');
+    t.line(lr(q + 'x ' + noAccent(it.nome), right));
+  });
   // Aviso de bebida (que não vai pra produção): o entregador/atendente vê o que pegar.
   const bebidas = (order.items || []).filter((it) => it.catId === 'bebidas');
   if (bebidas.length) {
@@ -135,6 +141,7 @@ export function productionTickets(order) {
       it.detalhes.forEach((d) => t.line(noAccent(d)));   // pedidos antigos (formato anterior)
     }
     // itens simples (bebida, chocolate quente) saem so com o nome, sem "Puro, sem acompanhamento"
+    if (it.precoUnit != null) t.feed(1).bold(true).line('Valor: ' + money(it.precoUnit)).bold(false);
     t.line(''.padEnd(WIDTH, '='));
     t.cut();
     chunks.push(t.bytes());
@@ -147,6 +154,41 @@ function wrap(s, width = WIDTH) {
   for (const w of words) { if ((cur + ' ' + w).trim().length > width) { lines.push(cur.trim()); cur = w; } else cur += ' ' + w; }
   if (cur.trim()) lines.push(cur.trim());
   return lines.length ? lines : [''];
+}
+
+// Alinha numa linha: texto à esquerda + valor à direita (trunca a esquerda se faltar espaço).
+function lr(left, right, width = WIDTH) {
+  left = String(left); right = String(right);
+  const max = width - right.length - 1;
+  if (left.length > max) left = left.slice(0, Math.max(0, max));
+  return left.padEnd(width - right.length) + right;
+}
+
+// ---- Relatório de vendas do dia (impressão térmica) ----
+export function reportTicket(report, store) {
+  const t = new Ticket();
+  t.align(1).bold(true).size(0x11).line(noAccent(store?.nome || 'ACAI MAIS SABOR')).size(0).bold(false);
+  t.line('RELATORIO DE VENDAS').line(report.dataLabel || '');
+  t.align(0).rule();
+  const vendas = report.vendas || [];
+  t.bold(true).line('Pedidos do dia: ' + vendas.length).bold(false);
+  vendas.forEach((o) => t.line(lr('#' + padNum(o.num) + '  ' + (o.hora || ''), money(o.total))));
+  if (!vendas.length) t.line('Nenhum pedido hoje.');
+  t.rule();
+  t.line(lr('Venda (produtos):', money(report.vendaSemTaxa)));
+  t.line(lr('Taxa de entrega:', money(report.taxaTotal)));
+  t.feed(1).size(0x11).bold(true).line('TOTAL: ' + money(report.vendaComTaxa)).size(BODY).bold(false);
+  const canc = report.cancelados || [];
+  if (canc.length) {
+    t.rule();
+    t.bold(true).line('CANCELADOS: ' + canc.length).bold(false);
+    canc.forEach((o) => t.line(lr('#' + padNum(o.num) + '  ' + (o.hora || ''), money(o.total))));
+    t.line(lr('Valor cancelado:', money(canc.reduce((s, o) => s + Number(o.total || 0), 0))));
+  }
+  t.rule();
+  t.align(1).line('Zera amanha junto com os pedidos').align(0);
+  t.cut();
+  return t.bytes();
 }
 
 // =============================================================================
@@ -233,6 +275,13 @@ export const printer = {
       : [deliveryTicket(order, store), deliveryTicket(order, store)];
     const bebida = bebidaTicket(order); // sai logo após a via do entregador, pra grampear junto
     const jobs = [...vias, ...(bebida ? [bebida] : []), ...productionTickets(order)];
+    if (pcfg.method === 'serial') { for (const j of jobs) { await this.writeSerial(j); await new Promise((r) => setTimeout(r, 250)); } }
+    else { await this.qzPrint(jobs); }
+    return jobs.length;
+  },
+  // Relatório de vendas do dia (1 papel).
+  async printReport(report, store) {
+    const jobs = [reportTicket(report, store)];
     if (pcfg.method === 'serial') { for (const j of jobs) { await this.writeSerial(j); await new Promise((r) => setTimeout(r, 250)); } }
     else { await this.qzPrint(jobs); }
     return jobs.length;
