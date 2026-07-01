@@ -11,7 +11,11 @@ import { CONFIG, hasSupabase } from './config.js';
 
 const KEY_FIRST = 'ams_atrib_first';  // primeiro toque (não sobrescreve)
 const KEY_LAST = 'ams_atrib_last';    // último toque com origem clara (last non-direct click)
+const KEY_PATH = 'ams_atrib_path';    // JORNADA: todos os toques com origem clara (1º, 2º, 3º...)
 const KEY_SESSION = 'ams_session';    // id da visita (pro funil pageview -> carrinho -> compra)
+const PATH_MAX = 12;                  // guarda no máx. os últimos 12 toques (não estoura o storage)
+
+const readJson = (k) => { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } };
 
 const clip = (s) => (s == null ? null : String(s).trim().slice(0, 160) || null);
 
@@ -55,15 +59,34 @@ export function captureAttribution() {
     // Visita "direta" NÃO apaga uma origem boa anterior — a campanha mantém o crédito.
     if (now) localStorage.setItem(KEY_LAST, JSON.stringify(stamp));
     else if (!localStorage.getItem(KEY_LAST)) localStorage.setItem(KEY_LAST, JSON.stringify(stamp));
+    // Jornada: só toques com origem CLARA entram (direto é volta, não é toque novo).
+    // Não repete o mesmo toque seguido; guarda no máximo os últimos PATH_MAX.
+    if (now) {
+      const t = { source: stamp.source, medium: stamp.medium || null, campaign: stamp.campaign || null, content: stamp.content || null, ts: stamp.ts, landing: stamp.landing };
+      let path = readJson(KEY_PATH); if (!Array.isArray(path)) path = [];
+      const prev = path[path.length - 1];
+      const igual = prev && prev.source === t.source && prev.medium === t.medium && prev.campaign === t.campaign && prev.content === t.content;
+      if (!igual) { path.push(t); if (path.length > PATH_MAX) path = path.slice(-PATH_MAX); localStorage.setItem(KEY_PATH, JSON.stringify(path)); }
+    }
   } catch (e) {}
 }
 
-// Devolve { first, last } pro checkout anexar ao pedido.
+// Devolve { first, last, path } pro checkout anexar ao pedido.
+// path = a jornada (1º, 2º, 3º... toque com origem clara). Quando há jornada,
+// first = path[0] e last = último toque (bate com o que o painel desenha). Só quando
+// a pessoa nunca teve um toque claro (só visita direta) é que cai no KEY_FIRST/LAST.
 export function getAttribution() {
-  const read = (k) => { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } };
-  const first = read(KEY_FIRST), last = read(KEY_LAST) || first;
-  if (!first && !last) return null;
-  return { first, last };
+  let path = readJson(KEY_PATH); if (!Array.isArray(path)) path = [];
+  const first = path.length ? path[0] : readJson(KEY_FIRST);
+  const last = path.length ? path[path.length - 1] : (readJson(KEY_LAST) || readJson(KEY_FIRST));
+  if (!first && !last && !path.length) return null;
+  return { first, last, path };
+}
+
+// Zera a jornada DEPOIS de uma compra: o próximo pedido do mesmo aparelho começa
+// uma jornada nova (senão os toques da compra passada vazam pro pedido seguinte).
+export function clearAttribution() {
+  try { [KEY_FIRST, KEY_LAST, KEY_PATH, KEY_SESSION].forEach((k) => localStorage.removeItem(k)); } catch (e) {}
 }
 
 // Id da visita (fica no aparelho). Serve pra ligar pageview -> carrinho no funil.

@@ -367,6 +367,15 @@ textarea.obs:focus { border-color: var(--magenta); }
 .atrib-table tbody tr.atrib-click { cursor: pointer; }
 .atrib-table tbody tr.atrib-click.active { background: var(--surface-2); box-shadow: inset 3px 0 0 var(--magenta); }
 
+/* ---- Jornada de toques (1º -> 2º -> 3º -> comprou) na tabela de vendas ---- */
+.jornada { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; white-space: normal; }
+.jor-chip { display: inline-flex; flex-direction: column; line-height: 1.15; padding: 4px 9px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); }
+.jor-chip b { font-size: .82rem; }
+.jor-chip small { font-size: .68rem; color: var(--ink-soft); }
+.jor-chip.jor-fim { background: color-mix(in srgb, var(--magenta) 12%, transparent); border-color: var(--magenta); }
+.jor-seta { color: var(--ink-soft); font-weight: 800; }
+.jor-buy { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 999px; background: var(--grad-marca); color: #fff; font-size: .78rem; font-weight: 800; }
+
 /* ---- Banner "Repetir último pedido" ---- */
 .repeat-bar { display: flex; align-items: center; gap: 12px; margin: 12px 16px 0; padding: 12px 14px; width: calc(100% - 32px); border: none; border-radius: var(--r-md); background: var(--grad-marca); color: #fff; box-shadow: var(--sh-2); cursor: pointer; text-align: left; font: inherit; }
 .repeat-bar:active { transform: scale(.99); }

@@ -73,7 +73,7 @@ async function load(corpo) {
   const [resumo, funil, pedidos] = await Promise.all([
     rpc('attribution_summary', { p_store: _store, p_de: de, p_ate: ate, p_touch: _touch }),
     rpc('attribution_funnel', { p_store: _store, p_de: de, p_ate: ate, p_touch: _touch }),
-    rpc('attribution_orders', { p_store: _store, p_de: de, p_ate: ate, p_limit: 300 }),
+    rpc('attribution_orders', { p_store: _store, p_de: de, p_ate: ate, p_limit: 500 }),
   ]);
   _resumo = Array.isArray(resumo) ? resumo : [];
   _funil = Array.isArray(funil) ? funil : [];
@@ -138,38 +138,77 @@ function rankCard(titulo, rows, vazio) {
   return card(titulo, rank);
 }
 
-// Célula de origem: source em negrito + campanha/anúncio embaixo (pequeno).
-function origemCell(source, campaign, content) {
-  const linhas = [el('b', { text: source || 'direto' })];
-  const detalhe = [campaign, content].filter(Boolean).join(' · ');
-  if (detalhe) linhas.push(el('small', { class: 'muted', style: 'display:block', text: detalhe }));
-  return el('td', {}, linhas);
+// Normaliza a origem no navegador (mesma regra do SQL: ig->instagram, fb->facebook).
+const NORM = { ig: 'instagram', fb: 'facebook', msg: 'messenger', an: 'audience_network' };
+function normSource(s) { const k = (s || '').toLowerCase(); return NORM[k] || k || 'direto'; }
+
+const NUMS = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩', '⑪', '⑫'];
+
+// Célula da JORNADA: 1º -> 2º -> 3º ... -> 🛒 comprou. Cada toque é um chip
+// (origem + campanha/anúncio embaixo). Pedido antigo (sem path) cai no first/last.
+function jornadaCell(o) {
+  // Janela de deploy (SQL antigo ainda no banco): a RPC não devolve estes campos.
+  // Avisa em vez de mostrar 'direto' errado pra todo mundo.
+  if (o.jornada === undefined && o.first_source === undefined && o.last_source === undefined) {
+    return el('td', {}, el('small', { class: 'muted', text: '— atualize: rode a migração 0016' }));
+  }
+  // Jornada já normaliza a origem no chip; pedido antigo (path vazio) cai no first/last.
+  let toques = Array.isArray(o.jornada) ? o.jornada.map((t) => ({ source: normSource(t.source), campaign: t.campaign, content: t.content })) : [];
+  if (!toques.length) {
+    // Sem jornada gravada. Distingue "sem rastreio" (atribuicao nula) de direto real.
+    if (!o.first_source && !o.last_source) {
+      return el('td', {}, el('div', { class: 'jornada' }, [
+        el('span', { class: 'jor-chip', text: 'sem rastreio' }),
+        el('span', { class: 'jor-seta', text: '→' }),
+        el('span', { class: 'jor-buy', text: '🛒 comprou' }),
+      ]));
+    }
+    const f = { source: o.first_source }, l = { source: o.last_source };
+    toques = (o.first_source && o.last_source && o.first_source !== o.last_source) ? [f, l] : [f];
+  }
+  const chips = [];
+  toques.forEach((t, i) => {
+    if (i) chips.push(el('span', { class: 'jor-seta', text: '→' }));
+    const detalhe = [t.campaign, t.content].filter(Boolean).join(' · ');
+    chips.push(el('span', { class: 'jor-chip' + (i === toques.length - 1 ? ' jor-fim' : '') }, [
+      el('b', { text: (NUMS[i] || ('#' + (i + 1))) + ' ' + (t.source || 'direto') }),
+      detalhe ? el('small', { text: detalhe }) : null,
+    ]));
+  });
+  chips.push(el('span', { class: 'jor-seta', text: '→' }));
+  chips.push(el('span', { class: 'jor-buy', text: '🛒 comprou' }));
+  return el('td', {}, el('div', { class: 'jornada' }, chips));
 }
 
-// Todas as vendas em TABELA por linha, com a JORNADA: entrou por (1º) -> fechou por
-// (último). O filtro do funil usa a origem do toque selecionado.
+// Todas as vendas em TABELA, cada uma com a JORNADA completa (todos os toques).
+// O filtro do funil usa a origem do toque selecionado (1º ou último).
 function ordersCard(all) {
   const rows = _filtro ? all.filter((o) => touchSource(o) === _filtro) : all;
-  const titulo = _filtro ? `Vendas de: ${_filtro}` : 'Todas as vendas — jornada de cada uma';
+  const titulo = _filtro ? `Vendas de: ${_filtro}` : 'Todas as vendas — jornada completa de cada uma';
   const header = el('div', { style: 'display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap' }, [
     el('h3', { text: titulo, style: 'margin:0' }),
     _filtro ? el('button', { class: 'btn btn-ghost mini', text: '✕ Ver todas', onclick: () => { _filtro = null; draw(); } }) : null,
   ]);
   if (!rows.length) return el('div', { class: 'panel-card' }, [header, el('p', { class: 'hint', text: 'Sem vendas nessa origem.' })]);
-  const head = el('tr', {}, ['#', 'Quando', 'Cliente', 'Entrou por (1º toque)', 'Fechou por (último)', 'Valor'].map((h) => el('th', { text: h })));
+  // Aviso de truncamento: a tabela traz no máx. 500 linhas, mas o resumo/funil contam
+  // TODAS. Se o período tiver mais que isso, avisa (senão parece que "sumiu" venda).
+  const totalVendas = _resumo.filter((r) => r.dimensao === 'source').reduce((s, r) => s + Number(r.pedidos || 0), 0);
+  const truncado = (!_filtro && totalVendas > all.length)
+    ? el('p', { class: 'hint', text: `Mostrando as ${all.length} vendas mais recentes de ${totalVendas} no período. Pra ver todas (e filtrar por origem sem cortar), use um período menor.` })
+    : null;
+  const head = el('tr', {}, ['#', 'Quando', 'Cliente', 'Jornada (1º → 2º → 3º → comprou)', 'Valor'].map((h) => el('th', { text: h })));
   const body = rows.map((o) => {
     const quando = (() => { try { return new Date(o.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; } })();
     return el('tr', {}, [
       el('td', { text: '#' + String(o.daily_number || 0).padStart(3, '0') }),
       el('td', { text: quando }),
       el('td', {}, [el('b', { text: o.cliente || '-' }), o.telefone ? el('small', { class: 'muted', style: 'display:block', text: o.telefone }) : null]),
-      origemCell(o.first_source, o.first_campaign, o.first_content),
-      origemCell(o.last_source, o.last_campaign, o.last_content),
+      jornadaCell(o),
       el('td', {}, el('b', { text: money(o.total) })),
     ]);
   });
   const table = el('table', { class: 'atrib-table' }, [el('thead', {}, head), el('tbody', {}, body)]);
-  return el('div', { class: 'panel-card' }, [header, el('div', { style: 'overflow-x:auto' }, table)]);
+  return el('div', { class: 'panel-card' }, [header, truncado, el('div', { style: 'overflow-x:auto' }, table)]);
 }
 
 function kpi(label, valor, mod) { return el('div', { class: 'kpi' + (mod ? ' kpi-' + mod : '') }, [el('div', { class: 'kpi-val', text: String(valor) }), el('div', { class: 'kpi-lbl', text: label })]); }
