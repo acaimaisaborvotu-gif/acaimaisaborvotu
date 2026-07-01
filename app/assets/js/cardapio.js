@@ -8,6 +8,17 @@ import { getStore, getSettings, isOpenNow, nextOpenLabel, buildCatalog, hydrate,
 import { openProduct } from './product-modal.js';
 import { openCheckout } from './checkout.js';
 import { track } from './tracking.js';
+import { captureAttribution, trackVisit } from './attribution.js';
+
+// Captura a origem da visita (UTM / link bonito / referrer) o quanto antes,
+// antes de qualquer navegação. Fica salva no aparelho até a pessoa comprar.
+captureAttribution();
+trackVisit('pageview');
+// Marca "adicionou ao carrinho" 1x por sessão (alimenta o funil por origem).
+let _addCartTracked = false;
+const markAddCart = () => { if (!_addCartTracked) { _addCartTracked = true; trackVisit('add_cart'); } };
+if (cart.getItems().length) markAddCart();
+cart.onChange((items) => { if (items.length) markAddCart(); });
 
 const ICON = {
   search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>',

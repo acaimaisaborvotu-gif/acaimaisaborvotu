@@ -349,6 +349,7 @@ export async function submitOrder(order) {
       items: order.items,
       eta_min: order.delivery.etaMin,
       eta_max: order.delivery.etaMax,
+      atribuicao: order.atribuicao || null,
     };
     const { data, error } = await client.rpc('place_order', { p });
     if (error) throw error;

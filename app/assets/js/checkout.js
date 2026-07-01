@@ -6,6 +6,7 @@
 import { el, money, toast, maskPhone, phoneCanon, phoneValido, ICON_WHATS } from './util.js';
 import * as cart from './cart.js';
 import { getStore, getSettings, isOpenNow, tempoEntrega, tempoRetirada, submitOrder, openOrdersCount, validarCupom, captureLead, customerLogin, taxaBairro, sugestaoBairro } from './data.js';
+import { getAttribution } from './attribution.js';
 import { track } from './tracking.js';
 
 const PAGAMENTOS = {
@@ -258,6 +259,7 @@ export function openCheckout({ openOrders: ooInicial = 0 } = {}) {
       customer: { nome: state.nome.trim(), telefone: state.telefone.trim() },
       items: items.map((i) => ({ nome: i.print?.titulo || i.nome, prodNome: i.prodNome || i.nome, detalhes: i.print?.detalhes || [], blocos: i.print?.blocos || [], qtd: i.qtd, precoUnit: i.precoUnit, tipo: i.tipo, refId: i.refId, catId: i.catId, tamanho: i.tamanho || null, acomps: i.acomps || [] })),
       totals: { subtotal: sub, taxa: taxa(), desconto: desconto(), total: total() },
+      atribuicao: getAttribution(),
       coupon: state.cupom?.codigo || null,
       payment: { metodo: state.metodo, trocoPara: state.metodo === 'dinheiro' ? state.trocoPara : '' },
       delivery: { tipo: state.tipo, endereco, etaMin: state.tipo === 'entrega' ? eta.min : retMin, etaMax: state.tipo === 'entrega' ? eta.max : retMin },

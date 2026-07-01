@@ -11,6 +11,7 @@ import * as SEED from './menu-data.js';
 import { el, money, toast, escapeHtml, imgUrl } from './util.js';
 import { renderClientes } from './crm.js';
 import { renderDashboard } from './dashboard.js';
+import { renderAttribution } from './attribution-panel.js';
 
 const app = document.getElementById('app');
 const STORE_SLUG = CONFIG.STORE_ID;
@@ -168,7 +169,8 @@ async function logout() { await client.auth.signOut(); location.reload(); }
 function renderApp() {
   app.innerHTML = '';
   const isOwner = profile.role === 'owner';
-  const tabs = [['pedidos', 'Pedidos'], ['clientes', 'Clientes'], isOwner ? ['dashboard', 'Dashboard'] : null, ['cardapio', 'Cardápio'], isOwner ? ['config', 'Configurações'] : null, isOwner ? ['acessos', 'Acessos'] : null, ['impressora', 'Impressora']].filter(Boolean);
+  const isAgencia = !!profile.agencia; // acesso "agência" (só Nathan) — independe de ser dono
+  const tabs = [['pedidos', 'Pedidos'], ['clientes', 'Clientes'], isOwner ? ['dashboard', 'Dashboard'] : null, isAgencia ? ['atribuicao', 'Atribuição'] : null, ['cardapio', 'Cardápio'], isOwner ? ['config', 'Configurações'] : null, isOwner ? ['acessos', 'Acessos'] : null, ['impressora', 'Impressora']].filter(Boolean);
   const tabNav = el('div', { class: 'pn-tabs' }, tabs.map(([id, label]) => {
     const b = el('button', { class: id === tab ? 'active' : '', 'data-tab': id, text: label });
     if (id === 'pedidos') { const n = orders.filter((o) => o.status === 'novo').length; if (n) b.append(el('span', { class: 'badge', text: n })); }
@@ -188,6 +190,7 @@ function renderApp() {
     pedidos: renderOrders,
     clientes: () => renderClientes(document.getElementById('tabContent'), client, STORE_SLUG, store.nome, (currentMenu() || {}).textos),
     dashboard: () => renderDashboard(document.getElementById('tabContent'), client, STORE_SLUG),
+    atribuicao: () => renderAttribution(document.getElementById('tabContent'), client, STORE_SLUG),
     cardapio: renderCardapio, config: renderConfig, acessos: renderAcessos, impressora: renderImpressora,
   }[tab])();
 }

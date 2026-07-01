@@ -1,0 +1,5 @@
+# Links bonitos: redirect INSTANTÂNEO no servidor (302), carimbando a origem.
+# O "!" no fim = força (redireciona direto, sem carregar página nenhuma).
+/pedidos            /?utm_source=instagram&utm_medium=bio&utm_campaign=link_bio            302!
+/faca-seu-pedido    /?utm_source=whatsapp&utm_medium=conversa&utm_campaign=link_whatsapp    302!
+/pedidos-google     /?utm_source=google&utm_medium=perfil&utm_campaign=google_pedidos       302!
