@@ -8,6 +8,9 @@ import { el, money, toast } from './util.js';
 let _client = null, _store = '', _host = null;
 let periodo = '7d';
 let customDe = null, customAte = null;
+// 'last' = onde a pessoa FECHOU (último clique) | 'first' = por onde ela ENTROU (o
+// anúncio/canal que a trouxe). O toggle troca o crédito do funil + resumo.
+let _touch = 'last';
 // dados carregados + filtro por origem (clicar no funil filtra as vendas)
 let _corpo = null, _resumo = [], _funil = [], _pedidos = [], _filtro = null;
 
@@ -47,7 +50,17 @@ function paint() {
     const aplicar = el('button', { class: 'btn btn-ghost mini', text: 'Aplicar', onclick: () => { if (!de.value || !ate.value) return toast('Escolha as duas datas'); customDe = de.value; customAte = ate.value; paint(); } });
     _host.append(el('div', { class: 'crm-toolbar', style: 'margin-top:8px' }, [el('span', { class: 'hint', style: 'margin:0', text: 'De' }), de, el('span', { class: 'hint', style: 'margin:0', text: 'até' }), ate, aplicar]));
   }
-  _host.append(el('p', { class: 'hint', text: 'De onde vieram suas vendas, com o valor REAL do seu banco (não é estimativa do Meta). Links: /pedidos = bio, /faca-seu-pedido = WhatsApp, /pedidos-google = Google.' }));
+  // Toggle do crédito: primeiro toque (quem trouxe) x último toque (onde fechou).
+  const toques = [['first', '① Primeiro toque'], ['last', '② Último toque']];
+  _host.append(el('div', { class: 'pn-filters', style: 'margin-top:8px' }, toques.map(([id, label]) => {
+    const b = el('button', { class: id === _touch ? 'active' : '', text: label });
+    b.addEventListener('click', () => { _touch = id; paint(); });
+    return b;
+  })));
+  _host.append(el('p', { class: 'hint', text: _touch === 'first'
+    ? 'PRIMEIRO TOQUE: crédito pra origem que TROUXE o cliente (ex.: o anúncio). Bom pra saber o que gera cliente novo.'
+    : 'ÚLTIMO TOQUE: crédito pra origem por onde a pessoa FECHOU (ex.: o link da bio). Bom pra saber o que converte. Cada venda mostra a jornada inteira (entrou → fechou).' }));
+  _host.append(el('p', { class: 'hint', text: 'Valor REAL do seu banco (não é estimativa do Meta). Links: /pedidos = bio, /faca-seu-pedido = WhatsApp, /pedidos-google = Google.' }));
   const corpo = el('div', { id: 'atrib-corpo' }, el('p', { class: 'hint', text: 'Carregando...' }));
   _host.append(corpo);
   if (periodo === 'custom' && (!customDe || !customAte)) corpo.innerHTML = '<p class="hint" style="text-align:center;padding:20px">Escolha as datas e clique em Aplicar.</p>';
@@ -58,8 +71,8 @@ async function load(corpo) {
   _corpo = corpo; _filtro = null;
   const [de, ate] = await intervalo();
   const [resumo, funil, pedidos] = await Promise.all([
-    rpc('attribution_summary', { p_store: _store, p_de: de, p_ate: ate }),
-    rpc('attribution_funnel', { p_store: _store, p_de: de, p_ate: ate }),
+    rpc('attribution_summary', { p_store: _store, p_de: de, p_ate: ate, p_touch: _touch }),
+    rpc('attribution_funnel', { p_store: _store, p_de: de, p_ate: ate, p_touch: _touch }),
     rpc('attribution_orders', { p_store: _store, p_de: de, p_ate: ate, p_limit: 300 }),
   ]);
   _resumo = Array.isArray(resumo) ? resumo : [];
@@ -86,9 +99,13 @@ function draw() {
   corpo.append(ordersCard(_pedidos));
 }
 
+// Qual origem usar pra filtrar/agrupar, conforme o toque escolhido.
+function touchSource(o) { return (_touch === 'first' ? o.first_source : o.last_source) || 'direto'; }
+
 // Funil por origem em TABELA. Cada linha é CLICÁVEL: filtra as vendas por aquela origem.
 function funnelCard(rows) {
-  if (!rows.length) return card('Funil por origem', el('p', { class: 'hint', text: 'Ainda sem visitas registradas. Começa a contar depois de subir (registra as visitas novas).' }));
+  const legenda = _touch === 'first' ? ' (por PRIMEIRO toque — quem trouxe)' : ' (por ÚLTIMO toque — onde fechou)';
+  if (!rows.length) return card('Funil por origem' + legenda, el('p', { class: 'hint', text: 'Ainda sem visitas registradas. Começa a contar depois de subir (registra as visitas novas).' }));
   const head = el('tr', {}, ['Origem', 'Visitas', 'Carrinho', 'Vendas', 'Valor'].map((h) => el('th', { text: h })));
   const body = rows.map((r) => {
     const origem = r.source || 'direto';
@@ -104,7 +121,7 @@ function funnelCard(rows) {
     return tr;
   });
   const table = el('table', { class: 'atrib-table' }, [el('thead', {}, head), el('tbody', {}, body)]);
-  return card('Funil por origem (clique numa origem para filtrar as vendas)', el('div', { style: 'overflow-x:auto' }, table));
+  return card('Funil por origem' + legenda + ' — clique numa origem pra filtrar as vendas', el('div', { style: 'overflow-x:auto' }, table));
 }
 
 // Ranking com barra: chave + pedidos + valor.
@@ -121,25 +138,33 @@ function rankCard(titulo, rows, vazio) {
   return card(titulo, rank);
 }
 
-// Todas as vendas em TABELA por linha. Se _filtro tiver origem, mostra só as dela.
+// Célula de origem: source em negrito + campanha/anúncio embaixo (pequeno).
+function origemCell(source, campaign, content) {
+  const linhas = [el('b', { text: source || 'direto' })];
+  const detalhe = [campaign, content].filter(Boolean).join(' · ');
+  if (detalhe) linhas.push(el('small', { class: 'muted', style: 'display:block', text: detalhe }));
+  return el('td', {}, linhas);
+}
+
+// Todas as vendas em TABELA por linha, com a JORNADA: entrou por (1º) -> fechou por
+// (último). O filtro do funil usa a origem do toque selecionado.
 function ordersCard(all) {
-  const rows = _filtro ? all.filter((o) => (o.source || 'direto') === _filtro) : all;
-  const titulo = _filtro ? `Vendas de: ${_filtro}` : 'Todas as vendas (por linha)';
+  const rows = _filtro ? all.filter((o) => touchSource(o) === _filtro) : all;
+  const titulo = _filtro ? `Vendas de: ${_filtro}` : 'Todas as vendas — jornada de cada uma';
   const header = el('div', { style: 'display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap' }, [
     el('h3', { text: titulo, style: 'margin:0' }),
     _filtro ? el('button', { class: 'btn btn-ghost mini', text: '✕ Ver todas', onclick: () => { _filtro = null; draw(); } }) : null,
   ]);
   if (!rows.length) return el('div', { class: 'panel-card' }, [header, el('p', { class: 'hint', text: 'Sem vendas nessa origem.' })]);
-  const head = el('tr', {}, ['#', 'Quando', 'Cliente', 'Origem', 'Campanha', 'Anúncio', 'Valor'].map((h) => el('th', { text: h })));
+  const head = el('tr', {}, ['#', 'Quando', 'Cliente', 'Entrou por (1º toque)', 'Fechou por (último)', 'Valor'].map((h) => el('th', { text: h })));
   const body = rows.map((o) => {
     const quando = (() => { try { return new Date(o.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; } })();
     return el('tr', {}, [
       el('td', { text: '#' + String(o.daily_number || 0).padStart(3, '0') }),
       el('td', { text: quando }),
-      el('td', {}, [el('b', { text: o.cliente || '-' }), o.telefone ? el('small', { class: 'muted', style: 'display:block' , text: o.telefone }) : null]),
-      el('td', { text: o.source || 'direto' }),
-      el('td', { text: o.campaign || '-' }),
-      el('td', { text: o.content || '-' }),
+      el('td', {}, [el('b', { text: o.cliente || '-' }), o.telefone ? el('small', { class: 'muted', style: 'display:block', text: o.telefone }) : null]),
+      origemCell(o.first_source, o.first_campaign, o.first_content),
+      origemCell(o.last_source, o.last_campaign, o.last_content),
       el('td', {}, el('b', { text: money(o.total) })),
     ]);
   });
