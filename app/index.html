@@ -76,12 +76,12 @@
   <link rel="modulepreload" href="assets/js/product-modal.js" />
   <link rel="modulepreload" href="assets/js/checkout.js" />
 
-  <!-- Google Tag Manager -->
-  <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+  <!-- Google Tag Manager (não carrega em localhost: teste não polui os dados reais) -->
+  <script>if(!/^(localhost|127\.|0\.0\.0\.0|192\.168\.)/.test(location.hostname)){(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
   new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
   j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
   'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
-  })(window,document,'script','dataLayer','GTM-5CXQ2MML');</script>
+  })(window,document,'script','dataLayer','GTM-5CXQ2MML');}</script>
   <!-- End Google Tag Manager -->
 
   <link rel="stylesheet" href="assets/css/theme.css" />

@@ -31,7 +31,20 @@ function fromUrl() {
     fbclid: clip(p.get('fbclid')),
     gclid: clip(p.get('gclid')),
   };
-  return Object.values(o).some(Boolean) ? o : null;
+  if (!Object.values(o).some(Boolean)) return null;
+  // Clique com click id mas SEM utm_source (anúncio sem UTM configurada): não pode
+  // virar "direto". fbclid = veio do Meta (usa o referrer pra separar fb de ig);
+  // gclid = veio do Google. É fallback — a fonte da verdade é a UTM no anúncio.
+  if (!o.source) {
+    if (o.fbclid) {
+      o.source = /facebook\.com|fb\.com/i.test(document.referrer || '') ? 'facebook' : 'instagram';
+      o.medium = o.medium || 'pago';
+    } else if (o.gclid) {
+      o.source = 'google';
+      o.medium = o.medium || 'pago';
+    }
+  }
+  return o;
 }
 
 // Sem UTM: tenta inferir pela origem do clique (referrer). "direto" = digitou/salvou.
@@ -101,6 +114,8 @@ function sessionId() {
 // Best-effort: NUNCA trava o cardápio. Alimenta o funil por origem no painel.
 export async function trackVisit(event) {
   if (!hasSupabase()) return;
+  // Teste local não conta visita real no funil do painel.
+  if (/^(localhost|127\.|0\.0\.0\.0|192\.168\.)/.test(location.hostname)) return;
   try {
     const client = await sb();
     await client.rpc('track_visit', { p_store: CONFIG.STORE_ID, p_session: sessionId(), p_atrib: getAttribution(), p_event: event });

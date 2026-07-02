@@ -196,7 +196,7 @@ function ordersCard(all) {
   const truncado = (!_filtro && totalVendas > all.length)
     ? el('p', { class: 'hint', text: `Mostrando as ${all.length} vendas mais recentes de ${totalVendas} no período. Pra ver todas (e filtrar por origem sem cortar), use um período menor.` })
     : null;
-  const head = el('tr', {}, ['#', 'Quando', 'Cliente', 'Jornada (1º → 2º → 3º → comprou)', 'Valor'].map((h) => el('th', { text: h })));
+  const head = el('tr', {}, ['#', 'Quando', 'Cliente', 'Jornada (todos os toques → comprou)', 'Valor'].map((h) => el('th', { text: h })));
   const body = rows.map((o) => {
     const quando = (() => { try { return new Date(o.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; } })();
     return el('tr', {}, [
