@@ -8,6 +8,7 @@ import { el, money, toast } from './util.js';
 
 let _client = null, _store = '', _storeNome = '', _templates = {};
 let _host = null;
+let _isOwner = false;               // só o dono pode cancelar pedido
 let aba = 'clientes';                 // 'clientes' | 'abandonos'
 const f = { sort: 'oldest', minDays: null, onlyNew: false, onlyAband: false, search: '', offset: 0, limit: 50 };
 const ab = { hours: 720 };            // janela dos abandonos
@@ -21,10 +22,12 @@ const template = (tipo) => (_templates && _templates[tipo === 'inativo' ? 'waIna
 const fill = (t, nome) => String(t || '').replace(/\{nome\}/g, ((nome || '').trim().split(' ')[0]) || 'tudo bem?').replace(/\{loja\}/g, _storeNome || 'Açaí Mais Sabor');
 const wa = (phone, msg) => `https://wa.me/${String(phone || '').replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`;
 const dataCurta = (iso) => { try { return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' }); } catch (e) { return ''; } };
+const dataHora = (iso) => { try { return new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; } };
 const diasDesde = (iso) => { try { return Math.floor((Date.now() - new Date(iso).getTime()) / 86400000); } catch (e) { return null; } };
+const mesmoDia = (a, b) => { try { return new Date(a).toDateString() === new Date(b).toDateString(); } catch (e) { return false; } };
 
-export function renderClientes(host, client, storeSlug, storeNome, templates) {
-  _host = host; _client = client; _store = storeSlug; _storeNome = storeNome || _storeNome; _templates = templates || {};
+export function renderClientes(host, client, storeSlug, storeNome, templates, isOwner) {
+  _host = host; _client = client; _store = storeSlug; _storeNome = storeNome || _storeNome; _templates = templates || {}; _isOwner = !!isOwner;
   paint();
 }
 
@@ -144,8 +147,9 @@ function customerRow(c) {
 }
 
 // Drawer com a JORNADA DE COMPRA. Recalcula tudo dos pedidos reais (serve pro
-// cliente da lista E pro abandono que já comprou).
-async function openDrawer(c) {
+// cliente da lista E pro abandono que já comprou). openCart (opcional) = carrinho
+// aberto atual, mostrado no topo quando vem da aba de abandonos.
+async function openDrawer(c, openCart) {
   const overlay = el('div', { class: 'overlay' });
   const sheet = el('div', { class: 'sheet' });
   const body = el('div', { class: 'sheet-body' });
@@ -191,6 +195,22 @@ async function openDrawer(c) {
       body.append(banner(`💜 Cliente fiel: ${validos.length} pedidos. Último há ${diasUlt} dia${diasUlt === 1 ? '' : 's'}.`, 'ok'));
     }
 
+    // Carrinho aberto atual (quando veio da aba de abandonos) — com data pra comparar.
+    if (openCart) {
+      const itensCart = (openCart.items || []).map((i) => `${i.qtd || 1}x ${i.nome}`).join(', ') || '(vazio)';
+      const cartTs = openCart.updated_at || openCart.created_at;
+      const sobra = ultimo && cartTs && mesmoDia(cartTs, ultimo);
+      body.append(el('div', { class: 'opt-group', style: 'margin-top:14px;border:1px dashed var(--magenta)' }, [
+        el('div', { style: 'display:flex;justify-content:space-between;gap:8px;align-items:center' }, [
+          el('b', { text: '🛒 Carrinho aberto (não finalizado)' }),
+          el('span', { class: 'oprice', style: 'flex:none', text: money(openCart.cart_value) }),
+        ]),
+        el('small', { class: 'muted', style: 'display:block;margin-top:3px', text: itensCart }),
+        el('small', { class: 'muted', style: 'display:block', text: 'Adicionado: ' + dataHora(cartTs) }),
+        sobra ? el('small', { style: 'display:block;margin-top:2px;color:var(--amarelo-dark);font-weight:600', text: '⚠️ mesmo dia da última compra — pode ser sobra do pedido' }) : null,
+      ]));
+    }
+
     // Linha do tempo de pedidos.
     body.append(el('h3', { style: 'margin:14px 0 8px', text: 'Histórico de pedidos' }));
     if (!validos.length && !pedidos.length) { body.append(el('p', { class: 'hint', text: 'Sem pedidos registrados.' })); }
@@ -208,7 +228,7 @@ async function openDrawer(c) {
         el('div', { style: 'margin-top:6px' },
           cancelado
             ? el('span', { class: 'st-badge st-cancel', text: 'Cancelado' })
-            : el('button', { class: 'btn btn-ghost mini', style: 'color:var(--danger)', text: 'Cancelar pedido', onclick: () => cancelarPedido(o, render) })),
+            : (_isOwner ? el('button', { class: 'btn btn-ghost mini', style: 'color:var(--danger)', text: 'Cancelar pedido', onclick: () => cancelarPedido(o, render) }) : null)),
       ]));
     });
 
@@ -222,6 +242,7 @@ async function openDrawer(c) {
 
 // Cancela um pedido (inclusive já entregue): sai do faturamento e do total do cliente.
 async function cancelarPedido(o, reRender) {
+  if (!_isOwner) return toast('Só o dono pode cancelar pedido.');
   const num = o.daily_number ? '#' + String(o.daily_number).padStart(3, '0') : 'esse pedido';
   if (!confirm(`Cancelar ${num}? Ele sai do faturamento e do total gasto do cliente.`)) return;
   const { error } = await _client.from('orders').update({ status: 'cancelado' }).eq('id', o.id);
@@ -255,20 +276,24 @@ function abandonedRow(l) {
   const tempo = min < 60 ? `há ${min} min` : min < 1440 ? `há ${Math.floor(min / 60)}h` : `há ${Math.floor(min / 1440)}d`;
   const carrinho = (l.items || []).map((i) => `${i.qtd || 1}x ${i.nome}`).join(', ') || '(carrinho vazio)';
   const jaCliente = !!l.ever_bought;
+  const cartTs = l.updated_at || l.created_at;
+  const sobra = jaCliente && l.last_order_at && cartTs && mesmoDia(cartTs, l.last_order_at);
   return el('div', { class: 'crm-row' }, [
     el('div', { class: 'crm-info' }, [
       el('div', { style: 'display:flex;align-items:center;gap:8px;flex-wrap:wrap' }, [
         el('b', { text: l.name || '(sem nome)' }),
         el('span', { class: 'st-badge ' + (jaCliente ? 'st-recor' : 'st-novo'), text: jaCliente ? 'já é cliente' : 'nunca comprou' }),
       ]),
-      el('small', { class: 'muted', style: 'display:block;margin-top:2px', text: `${l.phone} · ${tempo}` }),
+      el('small', { class: 'muted', style: 'display:block;margin-top:2px', text: l.phone }),
       el('div', { class: 'crm-badges', style: 'margin-top:5px' }, [
         el('span', { class: 'pill', text: money(l.cart_value) }),
       ]),
       el('small', { class: 'muted', style: 'display:block;margin-top:3px', text: '🛒 ' + carrinho }),
+      el('small', { class: 'muted', style: 'display:block;margin-top:3px', text: `Carrinho: ${dataHora(cartTs)} · ${tempo}` + (jaCliente && l.last_order_at ? `  ·  última compra: ${dataCurta(l.last_order_at)}` : '') }),
+      sobra ? el('small', { style: 'display:block;margin-top:2px;color:var(--amarelo-dark);font-weight:600', text: '⚠️ carrinho no mesmo dia da última compra — pode ser sobra do pedido' }) : null,
     ]),
     el('div', { class: 'crm-acoes' }, [
-      jaCliente ? el('button', { class: 'btn btn-ghost mini', text: 'Histórico', onclick: () => openDrawer({ phone: l.phone, name: l.name }) }) : null,
+      jaCliente ? el('button', { class: 'btn btn-ghost mini', text: 'Histórico', onclick: () => openDrawer({ phone: l.phone, name: l.name }, l) }) : null,
       el('a', { class: 'btn btn-whats mini', href: wa(l.phone, fill(template('abandono'), l.name)), target: '_blank', rel: 'noopener', title: 'WhatsApp', html: '💬' }),
     ]),
   ]);

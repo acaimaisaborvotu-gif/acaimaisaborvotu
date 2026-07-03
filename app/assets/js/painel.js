@@ -188,7 +188,7 @@ function renderApp() {
   );
   ({
     pedidos: renderOrders,
-    clientes: () => renderClientes(document.getElementById('tabContent'), client, STORE_SLUG, store.nome, (currentMenu() || {}).textos),
+    clientes: () => renderClientes(document.getElementById('tabContent'), client, STORE_SLUG, store.nome, (currentMenu() || {}).textos, profile.role === 'owner'),
     dashboard: () => renderDashboard(document.getElementById('tabContent'), client, STORE_SLUG),
     atribuicao: () => renderAttribution(document.getElementById('tabContent'), client, STORE_SLUG),
     cardapio: renderCardapio, config: renderConfig, acessos: renderAcessos, impressora: renderImpressora,
@@ -341,7 +341,7 @@ function orderCard(o) {
     ]),
     el('div', { class: 'oactions' }, [
       el('button', { class: 'btn btn-ghost mini', style: 'flex:0 0 auto', html: '🖨', title: 'Reimprimir', onclick: () => doPrint(o) }),
-      !['entregue', 'cancelado'].includes(o.status)
+      (profile.role === 'owner' && !['entregue', 'cancelado'].includes(o.status))
         ? el('button', { class: 'btn btn-ghost mini', style: 'flex:0 0 auto;color:var(--danger)', text: 'Cancelar', title: 'Cancelar pedido', onclick: () => cancelOrder(o) }) : null,
       nextStep(o) ? el('button', { class: 'btn btn-primary', text: nextStep(o).action, onclick: () => advance(o) }) : el('span', { class: 'muted', style: 'flex:1;text-align:center', text: o.status === 'cancelado' ? 'Pedido cancelado' : 'Pedido finalizado' }),
     ]),
@@ -362,6 +362,7 @@ async function advance(o) {
 // Cancela o pedido (erro no pedido ou cliente desistiu). Pede confirmação porque
 // o cliente passa a ver "cancelado" no acompanhamento e sai do faturamento.
 async function cancelOrder(o) {
+  if (profile.role !== 'owner') return toast('Só o dono pode cancelar pedido.');
   const num = '#' + String(o.daily_number || 0).padStart(3, '0');
   if (!confirm(`Cancelar o pedido ${num}? O cliente vai ver como cancelado e ele sai do faturamento.`)) return;
   const { error } = await client.from('orders').update({ status: 'cancelado' }).eq('id', o.id);
