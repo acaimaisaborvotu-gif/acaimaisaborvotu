@@ -51,16 +51,15 @@ function paint() {
     _host.append(el('div', { class: 'crm-toolbar', style: 'margin-top:8px' }, [el('span', { class: 'hint', style: 'margin:0', text: 'De' }), de, el('span', { class: 'hint', style: 'margin:0', text: 'até' }), ate, aplicar]));
   }
   // Toggle do crédito: primeiro toque (quem trouxe) x último toque (onde fechou).
-  const toques = [['first', '① Primeiro toque'], ['last', '② Último toque']];
+  const toques = [['first', '1º toque'], ['last', 'Último toque']];
   _host.append(el('div', { class: 'pn-filters', style: 'margin-top:8px' }, toques.map(([id, label]) => {
     const b = el('button', { class: id === _touch ? 'active' : '', text: label });
     b.addEventListener('click', () => { _touch = id; paint(); });
     return b;
   })));
-  _host.append(el('p', { class: 'hint', text: _touch === 'first'
-    ? 'PRIMEIRO TOQUE: crédito pra origem que TROUXE o cliente (ex.: o anúncio). Bom pra saber o que gera cliente novo.'
-    : 'ÚLTIMO TOQUE: crédito pra origem por onde a pessoa FECHOU (ex.: o link da bio). Bom pra saber o que converte. Cada venda mostra a jornada inteira (entrou → fechou).' }));
-  _host.append(el('p', { class: 'hint', text: 'Valor REAL do seu banco (não é estimativa do Meta). Links: /pedidos = bio, /faca-seu-pedido = WhatsApp, /pedidos-google = Google.' }));
+  _host.append(el('p', { class: 'hint', style: 'margin:6px 0 0', text: _touch === 'first'
+    ? 'Crédito pra origem que TROUXE o cliente — mostra o que gera cliente novo.'
+    : 'Crédito pra origem onde a pessoa FECHOU. Cada venda tem a jornada completa abaixo.' }));
   const corpo = el('div', { id: 'atrib-corpo' }, el('p', { class: 'hint', text: 'Carregando...' }));
   _host.append(corpo);
   if (periodo === 'custom' && (!customDe || !customAte)) corpo.innerHTML = '<p class="hint" style="text-align:center;padding:20px">Escolha as datas e clique em Aplicar.</p>';
@@ -97,6 +96,7 @@ function draw() {
   corpo.append(rankCard('Por campanha', byDim('campaign'), 'Nenhuma venda com campanha (links/anúncios).'));
   corpo.append(rankCard('Por anúncio', byDim('content'), 'Nenhuma venda com anúncio (utm_content).'));
   corpo.append(ordersCard(_pedidos));
+  corpo.append(el('p', { class: 'hint', style: 'text-align:center;margin-top:14px', text: 'Valor real do seu banco (não é estimativa do Meta) · /pedidos = bio · /faca-seu-pedido = WhatsApp · /pedidos-google = Google' }));
 }
 
 // Qual origem usar pra filtrar/agrupar, conforme o toque escolhido.
@@ -104,8 +104,7 @@ function touchSource(o) { return (_touch === 'first' ? o.first_source : o.last_s
 
 // Funil por origem em TABELA. Cada linha é CLICÁVEL: filtra as vendas por aquela origem.
 function funnelCard(rows) {
-  const legenda = _touch === 'first' ? ' (por PRIMEIRO toque — quem trouxe)' : ' (por ÚLTIMO toque — onde fechou)';
-  if (!rows.length) return card('Funil por origem' + legenda, el('p', { class: 'hint', text: 'Ainda sem visitas registradas. Começa a contar depois de subir (registra as visitas novas).' }));
+  if (!rows.length) return card('Funil por origem', el('p', { class: 'hint', text: 'Ainda sem visitas registradas (começa a contar nas visitas novas).' }));
   const head = el('tr', {}, ['Origem', 'Visitas', 'Carrinho', 'Vendas', 'Valor'].map((h) => el('th', { text: h })));
   const body = rows.map((r) => {
     const origem = r.source || 'direto';
@@ -121,7 +120,10 @@ function funnelCard(rows) {
     return tr;
   });
   const table = el('table', { class: 'atrib-table' }, [el('thead', {}, head), el('tbody', {}, body)]);
-  return card('Funil por origem' + legenda + ' — clique numa origem pra filtrar as vendas', el('div', { style: 'overflow-x:auto' }, table));
+  return card('Funil por origem', el('div', {}, [
+    el('p', { class: 'hint', style: 'margin:0 0 8px', text: 'Toque numa origem pra filtrar as vendas abaixo.' }),
+    el('div', { style: 'overflow-x:auto' }, table),
+  ]));
 }
 
 // Ranking com barra: chave + pedidos + valor.
