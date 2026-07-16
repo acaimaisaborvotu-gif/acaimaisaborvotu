@@ -146,10 +146,10 @@ function customerRow(c) {
   return tr;
 }
 
-// Drawer com a JORNADA DE COMPRA. Recalcula tudo dos pedidos reais (serve pro
-// cliente da lista E pro abandono que já comprou). openCart (opcional) = carrinho
-// aberto atual, mostrado no topo quando vem da aba de abandonos.
-async function openDrawer(c, openCart) {
+// Drawer com a JORNADA DE COMPRA. Recalcula tudo dos pedidos reais e busca o
+// carrinho aberto do cliente (se tiver) pra mostrar no topo — serve pra lista de
+// clientes E pra aba de abandonos.
+async function openDrawer(c) {
   const overlay = el('div', { class: 'overlay' });
   const sheet = el('div', { class: 'sheet' });
   const body = el('div', { class: 'sheet-body' });
@@ -195,7 +195,9 @@ async function openDrawer(c, openCart) {
       body.append(banner(`💜 Cliente fiel: ${validos.length} pedidos. Último há ${diasUlt} dia${diasUlt === 1 ? '' : 's'}.`, 'ok'));
     }
 
-    // Carrinho aberto atual (quando veio da aba de abandonos) — com data pra comparar.
+    // Carrinho aberto do cliente (busca direto): mostra itens + quando foi montado.
+    const cartRows = await rpc('crm_open_cart', { p_store: _store, p_phone: c.phone });
+    const openCart = Array.isArray(cartRows) ? cartRows[0] : cartRows;
     if (openCart) {
       const itensCart = (openCart.items || []).map((i) => `${i.qtd || 1}x ${i.nome}`).join(', ') || '(vazio)';
       const cartTs = openCart.updated_at || openCart.created_at;
@@ -293,7 +295,7 @@ function abandonedRow(l) {
       sobra ? el('small', { style: 'display:block;margin-top:2px;color:var(--amarelo-dark);font-weight:600', text: '⚠️ carrinho no mesmo dia da última compra — pode ser sobra do pedido' }) : null,
     ]),
     el('div', { class: 'crm-acoes' }, [
-      jaCliente ? el('button', { class: 'btn btn-ghost mini', text: 'Histórico', onclick: () => openDrawer({ phone: l.phone, name: l.name }, l) }) : null,
+      jaCliente ? el('button', { class: 'btn btn-ghost mini', text: 'Histórico', onclick: () => openDrawer({ phone: l.phone, name: l.name }) }) : null,
       el('a', { class: 'btn btn-whats mini', href: wa(l.phone, fill(template('abandono'), l.name)), target: '_blank', rel: 'noopener', title: 'WhatsApp', html: '💬' }),
     ]),
   ]);

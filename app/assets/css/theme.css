@@ -282,6 +282,9 @@ a { color: inherit; text-decoration: none; }
 }
 .opt:hover { border-color: var(--rosa); }
 .opt.sel { border-color: var(--magenta); background: rgba(214, 33, 127, .05); }
+.opt.out { opacity: .55; pointer-events: none; background: var(--surface-2); }
+.opt.out .oname { text-decoration: line-through; }
+.opt .out-tag { font-size: .64rem; font-weight: 800; text-transform: uppercase; letter-spacing: .4px; padding: 3px 9px; border-radius: 999px; background: rgba(224, 62, 62, .12); color: var(--danger); }
 .opt .oname { flex: 1; font-weight: 700; font-size: .94rem; }
 .opt .oprice { font-weight: 800; font-size: .88rem; color: var(--roxo-700); }
 .opt .oprice.free { color: var(--ok); }
@@ -366,6 +369,10 @@ textarea.obs:focus { border-color: var(--magenta); }
 .atrib-table tbody tr:hover { background: var(--surface-2); }
 .atrib-table tbody tr.atrib-click { cursor: pointer; }
 .atrib-table tbody tr.atrib-click.active { background: var(--surface-2); box-shadow: inset 3px 0 0 var(--magenta); }
+/* Origem líder do funil (mais valor) + barra de valor por linha */
+.atrib-table tbody tr.atrib-top { background: color-mix(in srgb, var(--magenta) 7%, transparent); }
+.atrib-bar { height: 5px; min-width: 54px; margin-top: 4px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
+.atrib-bar-fill { height: 100%; background: var(--grad-marca); border-radius: 999px; }
 
 /* ---- Jornada de toques (1º -> 2º -> 3º -> comprou) na tabela de vendas ---- */
 .jornada { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; white-space: normal; }

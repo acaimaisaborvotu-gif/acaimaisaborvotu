@@ -170,21 +170,17 @@ export function reportTicket(report, store) {
   t.align(1).bold(true).size(0x11).line(noAccent(store?.nome || 'ACAI MAIS SABOR')).size(0).bold(false);
   t.line('RELATORIO DE VENDAS').line(report.dataLabel || '');
   t.align(0).rule();
+  // Só os TOTAIS do dia (sem listar venda por venda).
   const vendas = report.vendas || [];
-  t.bold(true).line('Pedidos do dia: ' + vendas.length).bold(false);
-  vendas.forEach((o) => t.line(lr('#' + padNum(o.num) + '  ' + (o.hora || ''), money(o.total))));
-  if (!vendas.length) t.line('Nenhum pedido hoje.');
-  t.rule();
+  const canc = report.cancelados || [];
+  const cancVal = canc.reduce((s, o) => s + Number(o.total || 0), 0);
+  t.bold(true).line(lr('Vendas do dia:', String(vendas.length))).bold(false);
   t.line(lr('Venda (produtos):', money(report.vendaSemTaxa)));
   t.line(lr('Taxa de entrega:', money(report.taxaTotal)));
   t.feed(1).size(0x11).bold(true).line('TOTAL: ' + money(report.vendaComTaxa)).size(BODY).bold(false);
-  const canc = report.cancelados || [];
-  if (canc.length) {
-    t.rule();
-    t.bold(true).line('CANCELADOS: ' + canc.length).bold(false);
-    canc.forEach((o) => t.line(lr('#' + padNum(o.num) + '  ' + (o.hora || ''), money(o.total))));
-    t.line(lr('Valor cancelado:', money(canc.reduce((s, o) => s + Number(o.total || 0), 0))));
-  }
+  t.rule();
+  t.bold(true).line(lr('Cancelados:', String(canc.length))).bold(false);
+  t.line(lr('Valor cancelado:', money(cancVal)));
   t.rule();
   t.align(1).line('Zera amanha junto com os pedidos').align(0);
   t.cut();

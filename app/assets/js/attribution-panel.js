@@ -102,26 +102,37 @@ function draw() {
 // Qual origem usar pra filtrar/agrupar, conforme o toque escolhido.
 function touchSource(o) { return (_touch === 'first' ? o.first_source : o.last_source) || 'direto'; }
 
-// Funil por origem em TABELA. Cada linha é CLICÁVEL: filtra as vendas por aquela origem.
+// Ícone por origem (reconhecimento rápido no funil e na jornada).
+const ORIGEM_ICON = { instagram: '📷', facebook: '📘', whatsapp: '💬', google: '🔍', messenger: '💬', audience_network: '📱', busca: '🔎', direto: '🔗', outro: '🌐' };
+const origemIcon = (s) => ORIGEM_ICON[(s || '').toLowerCase()] || '🌐';
+
+// Funil por origem em TABELA. Ícone + conversão + barra de valor; a origem líder
+// (mais valor) fica destacada. Cada linha é CLICÁVEL: filtra as vendas.
 function funnelCard(rows) {
   if (!rows.length) return card('Funil por origem', el('p', { class: 'hint', text: 'Ainda sem visitas registradas (começa a contar nas visitas novas).' }));
-  const head = el('tr', {}, ['Origem', 'Visitas', 'Carrinho', 'Vendas', 'Valor'].map((h) => el('th', { text: h })));
-  const body = rows.map((r) => {
+  const maxVal = Math.max(1, ...rows.map((r) => Number(r.valor) || 0));
+  const head = el('tr', {}, ['Origem', 'Visitas', 'Carrinho', 'Vendas', 'Conv.', 'Valor'].map((h) => el('th', { text: h })));
+  const body = rows.map((r, idx) => {
     const origem = r.source || 'direto';
     const ativo = _filtro === origem;
-    const tr = el('tr', { class: 'atrib-click' + (ativo ? ' active' : ''), title: 'Clique para ver só as vendas desta origem' }, [
-      el('td', {}, el('b', { text: origem })),
-      el('td', { text: String(r.pageviews || 0) }),
+    const pv = Number(r.pageviews || 0), cp = Number(r.compras || 0), val = Number(r.valor) || 0;
+    const conv = pv ? Math.round(cp / pv * 100) + '%' : '—';
+    const pct = Math.round(val / maxVal * 100);
+    const isTop = val === maxVal && val > 0 && cp > 0;
+    const tr = el('tr', { class: 'atrib-click' + (ativo ? ' active' : '') + (isTop ? ' atrib-top' : ''), title: 'Clique para ver só as vendas desta origem' }, [
+      el('td', {}, el('b', { text: origemIcon(origem) + ' ' + origem })),
+      el('td', { text: String(pv) }),
       el('td', { text: String(r.add_cart || 0) }),
-      el('td', { text: String(r.compras || 0) }),
-      el('td', {}, el('b', { text: money(r.valor) })),
+      el('td', { text: String(cp) }),
+      el('td', { text: conv }),
+      el('td', {}, [el('b', { text: money(r.valor) }), el('div', { class: 'atrib-bar' }, el('div', { class: 'atrib-bar-fill', style: `width:${pct}%` }))]),
     ]);
     tr.addEventListener('click', () => { _filtro = ativo ? null : origem; draw(); });
     return tr;
   });
   const table = el('table', { class: 'atrib-table' }, [el('thead', {}, head), el('tbody', {}, body)]);
   return card('Funil por origem', el('div', {}, [
-    el('p', { class: 'hint', style: 'margin:0 0 8px', text: 'Toque numa origem pra filtrar as vendas abaixo.' }),
+    el('p', { class: 'hint', style: 'margin:0 0 8px', text: 'Toque numa origem pra filtrar as vendas. Conv. = vendas ÷ visitas.' }),
     el('div', { style: 'overflow-x:auto' }, table),
   ]));
 }
@@ -173,7 +184,7 @@ function jornadaCell(o) {
     if (i) chips.push(el('span', { class: 'jor-seta', text: '→' }));
     const detalhe = [t.campaign, t.content].filter(Boolean).join(' · ');
     chips.push(el('span', { class: 'jor-chip' + (i === toques.length - 1 ? ' jor-fim' : '') }, [
-      el('b', { text: (NUMS[i] || ('#' + (i + 1))) + ' ' + (t.source || 'direto') }),
+      el('b', { text: (NUMS[i] || ('#' + (i + 1))) + ' ' + origemIcon(t.source) + ' ' + (t.source || 'direto') }),
       detalhe ? el('small', { text: detalhe }) : null,
     ]));
   });

@@ -265,11 +265,13 @@ function renderReport(host) {
       e.target.disabled = false;
     } }),
   ]));
+  const cancVal = r.cancelados.reduce((s, o) => s + Number(o.total || 0), 0);
   card.append(el('div', { class: 'kpi-grid', style: 'margin-top:12px' }, [
     kpi('Venda (produtos)', money(r.vendaSemTaxa), 'principal'),
     kpi('Taxa de entrega', money(r.taxaTotal)),
     kpi('Total recebido', money(r.vendaComTaxa)),
-    kpi('Pedidos', String(r.vendas.length)),
+    kpi('Vendas', String(r.vendas.length)),
+    kpi('Cancelados' + (r.cancelados.length ? ' · ' + money(cancVal) : ''), String(r.cancelados.length), r.cancelados.length ? 'alerta' : ''),
   ]));
   const lista = el('div', { class: 'rank', style: 'margin-top:14px' });
   if (!r.vendas.length) lista.append(el('p', { class: 'hint', text: 'Nenhum pedido hoje ainda.' }));
@@ -420,6 +422,7 @@ function mergedSeed() {
     const rem = new Set(old.removidos || []);
     if (rem.size) {
       seed.COMBOS = seed.COMBOS.filter((c) => !rem.has(c.id));
+      seed.BASES = seed.BASES.filter((b) => !rem.has(b.id));
       seed.ACOMPANHAMENTOS.forEach((g) => { g.itens = g.itens.filter((i) => !rem.has(i.id)); });
       ['SALADAS', 'SOBREMESAS', 'BEBIDAS'].forEach((k) => { seed[k] = seed[k].filter((p) => !rem.has(p.id)); });
     }
@@ -433,6 +436,11 @@ function mergedSeed() {
     if (Array.isArray(old.RECIPIENTES) && old.RECIPIENTES.length) {
       const novos = seed.RECIPIENTES.filter((sr) => !old.RECIPIENTES.some((or) => or.id === sr.id));
       seed.RECIPIENTES = [...old.RECIPIENTES.map((r) => ({ ...r, tamanhos: (r.tamanhos || []).map((t) => ({ ...t })) })), ...novos];
+    }
+    // preserva as BASES da loja (nomes, adições/remoções). Esgotado vem da lista esgotados.
+    if (Array.isArray(old.BASES) && old.BASES.length) {
+      const novas = seed.BASES.filter((sb) => !old.BASES.some((ob) => ob.id === sb.id) && !rem.has(sb.id));
+      seed.BASES = [...old.BASES.map((b) => ({ ...b })), ...novas];
     }
     if (old.secao2) seed.secao2 = old.secao2;
     if (old.upsell) seed.upsell = old.upsell;
@@ -699,6 +707,18 @@ function renderCardapio() {
   });
   recCard.append(saveBtn(menu));
   host.append(recCard);
+
+  // Bases do açaí: nome + esgotado (some do cardápio) + adicionar/remover
+  const basesCard = el('div', { class: 'panel-card' }, [el('h3', { text: 'Bases do açaí' }), el('p', { class: 'hint', text: 'As bases que o cliente escolhe (inclusas no preço). A chave 🔑 marca como ESGOTADA e some do cardápio. "+ Adicionar base" cria uma nova. A base padrão (Açaí) não pode ser removida.' })]);
+  (menu.BASES || []).forEach((b) => basesCard.append(menuRow({
+    id: b.id, nome: b.nome, esgotado: esgot.has(b.id), simple: true, noStar: true,
+    onName: (v) => { b.nome = v; },
+    onEsg: () => toggleEsg(menu, b.id),
+    onRemove: b.padrao ? null : () => { if (confirm(`Remover a base "${b.nome}"?`)) { (menu.removidos = menu.removidos || []).push(b.id); menu.BASES = menu.BASES.filter((x) => x.id !== b.id); renderCardapio(); } },
+  })));
+  basesCard.append(el('button', { class: 'btn btn-ghost mini', style: 'margin-top:8px', text: '+ Adicionar base', onclick: () => { (menu.BASES = menu.BASES || []).push({ id: 'base-' + Date.now(), nome: 'Nova base' }); renderCardapio(); } }));
+  basesCard.append(saveBtn(menu));
+  host.append(basesCard);
 
   // Acompanhamentos: nome, preço, esgotado, adicionar/remover por grupo
   const acCard = el('div', { class: 'panel-card' }, [el('h3', { text: 'Acompanhamentos' }), el('p', { class: 'hint', text: 'Edite nome e preço de cada acompanhamento. "+ Adicionar" cria um novo no grupo.' })]);

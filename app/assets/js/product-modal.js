@@ -116,7 +116,16 @@ function sizePicker(recipientes, state, recompute) {
 function baseGroup(state) {
   const gb = el('div', { class: 'opt-group' });
   gb.append(groupHead('Base', (M.textos || {}).baseDesc || 'Escolha pelo menos 1. Pode trocar o Açaí ou combinar mais de uma base.', 'req+'));
+  const out = new Set(M.esgotados || []);
   M.BASES.forEach((b) => {
+    if (out.has(b.id)) {  // base esgotada: aparece marcada, NÃO é opção de compra
+      state.bases.delete(b.id);
+      gb.append(el('div', { class: 'opt out' }, [
+        el('span', { class: 'oname', text: b.nome }),
+        el('span', { class: 'out-tag', text: 'Esgotado' }),
+      ]));
+      return;
+    }
     const mark = el('span', { class: 'mark sq', html: state.bases.has(b.id) ? '&#10003;' : '' });
     const row = el('div', { class: 'opt' + (state.bases.has(b.id) ? ' sel' : '') }, [
       el('span', { class: 'oname', text: b.nome }),
