@@ -164,10 +164,21 @@ exports.handler = async function (event) {
   if (!store) return json(400, { ok: false, error: 'store ausente' });
 
   // 1) Config (pixel + token + versão + test code). Só a service key lê esta tabela.
-  const cfgs = await supaJson('/capi_config?store_slug=eq.' + encodeURIComponent(store) + '&select=*');
-  const cfg = (Array.isArray(cfgs) && cfgs[0]) || {};
+  //    Lê a resposta CRUA pra saber o PORQUÊ quando falha (401 = service key errada;
+  //    array vazio = RLS sem bypass / store errada; linha sem pixel/token = falta salvar).
+  const cfgResp = await supa('/capi_config?store_slug=eq.' + encodeURIComponent(store) + '&select=*');
+  const cfgBody = await cfgResp.json().catch(() => null);
+  const cfg = (Array.isArray(cfgBody) && cfgBody[0]) || {};
   const token = cfg.capi_token || process.env.META_CAPI_TOKEN || '';
-  if (!cfg.pixel_id || !token) return json(400, { ok: false, error: 'pixel_id/capi_token nao configurados no painel' });
+  if (!cfg.pixel_id || !token) {
+    let motivo;
+    if (cfgResp.status === 401 || cfgResp.status === 403) motivo = 'a SUPABASE_SERVICE_KEY parece errada/incompleta (Supabase respondeu ' + cfgResp.status + '). Confira se colou a chave service_role inteira no Netlify.';
+    else if (cfgResp.status >= 400) motivo = 'Supabase respondeu ' + cfgResp.status + ': ' + JSON.stringify(cfgBody).slice(0, 160);
+    else if (Array.isArray(cfgBody) && !cfgBody.length) motivo = 'a Function leu 0 linhas de capi_config (store "' + store + '"): service key sem bypass de RLS ou store diferente.';
+    else if (!cfg.pixel_id) motivo = 'falta o Pixel ID (salve no painel).';
+    else motivo = 'falta o token do CAPI (salve no painel).';
+    return json(400, { ok: false, error: 'pixel_id/capi_token nao configurados no painel', motivo, supabase_status: cfgResp.status });
+  }
 
   // 2) Teste de conexão (botão do painel): dispara um evento fake e devolve a resposta crua.
   if (b.teste) {
