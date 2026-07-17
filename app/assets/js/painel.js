@@ -949,7 +949,121 @@ function renderConfig() {
     cfg.settings = settings; toast('Configurações salvas. Já valem pro cliente.'); e.target.disabled = false;
   } });
 
-  host.append(ops, bairroCard, pays, hours, save);
+  host.append(ops, bairroCard, pays, hours, save, capiCard(), capiLogCard());
+}
+
+// ---- Meta CAPI: pixel + token (mascarado) + versão + test code COM VALIDADE ----
+// O token entra e nunca mais sai: capi_token_set grava, capi_config_get só devolve
+// a máscara. Quem lê o token de verdade é só a Netlify Function (service key).
+function capiCard() {
+  const card = el('div', { class: 'panel-card' }, [
+    el('h3', { text: 'Meta CAPI (eventos pelo servidor)' }),
+    el('p', { class: 'hint', text: 'O nosso servidor manda a compra direto pro Meta, pelo nosso domínio (não depende do navegador do cliente nem do Stape). O token fica guardado no banco e nunca é exibido de volta.' }),
+  ]);
+  const box = el('div', {}, el('p', { class: 'hint', text: 'Carregando...' }));
+  card.append(box);
+
+  const load = async () => {
+    box.innerHTML = '';
+    const { data, error } = await client.rpc('capi_config_get', { p_store: STORE_SLUG });
+    if (error) { box.append(el('p', { class: 'hint', style: 'color:var(--danger)', text: 'Erro ao ler: ' + error.message + ' — você rodou a migração 0022?' })); return; }
+    const c = (Array.isArray(data) ? data[0] : data) || {};
+
+    const pixel = el('input', { type: 'text', value: c.pixel_id || '', placeholder: '629750955135545' });
+    const ver = el('input', { type: 'text', value: c.graph_api_version || 'v21.0', placeholder: 'v21.0' });
+    const testCode = el('input', { type: 'text', value: c.test_event_code || '', placeholder: 'TEST12345 (da aba Testar Eventos)' });
+    const horas = el('select', { class: 'crm-select' });
+    [[0, 'desligado'], [1, '1 hora'], [6, '6 horas'], [24, '24 horas'], [72, '72 horas']].forEach(([v, t]) => horas.append(el('option', { value: String(v), text: t })));
+
+    // Token: mostra só a máscara; "Trocar token" abre o campo pra colar um novo.
+    const tokenWrap = el('div');
+    const renderToken = (trocando) => {
+      tokenWrap.innerHTML = '';
+      if (c.token_mask && !trocando) {
+        tokenWrap.append(el('div', { class: 'frow' }, [el('label', { text: 'Token do CAPI' }), el('div', { style: 'display:flex;gap:8px;align-items:center' }, [
+          el('span', { class: 'pill', text: c.token_mask }),
+          el('button', { class: 'btn btn-ghost mini', text: 'Trocar token', onclick: () => renderToken(true) }),
+        ])]));
+        return;
+      }
+      const inp = el('input', { type: 'password', placeholder: 'cole o token do Meta aqui' });
+      tokenWrap.append(el('div', { class: 'frow' }, [el('label', { text: 'Token do CAPI' }), el('div', { style: 'display:flex;gap:8px' }, [
+        inp,
+        el('button', { class: 'btn btn-primary mini', text: 'Salvar token', onclick: async (e) => {
+          if (!inp.value.trim()) return toast('Cole o token primeiro');
+          e.target.disabled = true;
+          const { error: err } = await client.rpc('capi_token_set', { p_store: STORE_SLUG, p_token: inp.value.trim() });
+          if (err) { toast('Erro: ' + err.message); e.target.disabled = false; return; }
+          toast('Token salvo com segurança'); load();
+        } }),
+      ])]));
+    };
+    renderToken(false);
+
+    const status = el('div');
+    if (c.test_ativo) status.append(el('p', { class: 'hint', style: 'color:var(--amarelo-dark);font-weight:700', text: '⚠️ Modo TESTE ativo até ' + new Date(c.test_expira_em).toLocaleString('pt-BR') + ' — depois disso desliga sozinho (nenhum evento fica preso no teste).' }));
+    const resultado = el('div');
+
+    const salvar = async () => {
+      const { error: err } = await client.rpc('capi_config_set', { p_store: STORE_SLUG, p_pixel: pixel.value.trim(), p_version: ver.value.trim(), p_test_code: testCode.value.trim(), p_test_horas: Number(horas.value) || 0 });
+      if (err) { toast('Erro: ' + err.message); return false; }
+      return true;
+    };
+
+    box.append(
+      el('div', { class: 'frow' }, [el('label', { text: 'Pixel ID' }), pixel]),
+      tokenWrap,
+      el('div', { class: 'frow' }, [el('label', { text: 'Versão da API' }), ver]),
+      el('div', { class: 'frow' }, [el('label', { text: 'Test code (Testar Eventos)' }), testCode]),
+      el('div', { class: 'frow' }, [el('label', { text: 'Ligar teste por' }), horas]),
+      status,
+      el('div', { style: 'display:flex;gap:8px;margin-top:12px;flex-wrap:wrap' }, [
+        el('button', { class: 'btn btn-primary', text: 'Salvar', onclick: async (e) => { e.target.disabled = true; if (await salvar()) { toast('Salvo'); load(); } else e.target.disabled = false; } }),
+        el('button', { class: 'btn btn-ghost', text: '🧪 Salvar e testar conexão', onclick: async (e) => {
+          e.target.disabled = true; resultado.innerHTML = '';
+          if (!(await salvar())) { e.target.disabled = false; return; }
+          try {
+            const r = await fetch('/.netlify/functions/capi', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ store: STORE_SLUG, teste: true, event_source_url: location.origin + '/' }) });
+            const j = await r.json().catch(() => ({}));
+            resultado.append(el('p', { class: 'hint', style: 'font-weight:700;color:' + (r.ok ? 'var(--ok)' : 'var(--danger)'), text: r.ok ? '✓ O Meta recebeu o evento de teste. Confere na aba Testar Eventos do Gerenciador.' : '✗ Falhou: ' + JSON.stringify(j.meta || j.error || j).slice(0, 300) }));
+          } catch (err) { resultado.append(el('p', { class: 'hint', style: 'color:var(--danger)', text: '✗ Não consegui chamar a Function: ' + err.message })); }
+          e.target.disabled = false;
+        } }),
+      ]),
+      resultado,
+    );
+  };
+  load();
+  return card;
+}
+
+// ---- Recibo de entrega: o que saiu pro Meta e o que ele respondeu ----
+function capiLogCard() {
+  const card = el('div', { class: 'panel-card' }, [
+    el('h3', { text: 'Eventos enviados (recibo)' }),
+    el('p', { class: 'hint', text: 'O que o nosso servidor mandou pro Meta e o que ele respondeu. É aqui que aparece o erro quando algo falha.' }),
+  ]);
+  const box = el('div', {}, el('p', { class: 'hint', text: 'Carregando...' }));
+  card.append(box);
+  (async () => {
+    const { data, error } = await client.from('capi_log').select('*').eq('store_slug', STORE_SLUG).order('criado_em', { ascending: false }).limit(20);
+    box.innerHTML = '';
+    if (error) { box.append(el('p', { class: 'hint', text: 'Erro: ' + error.message + ' — rodou a migração 0022?' })); return; }
+    if (!data || !data.length) { box.append(el('p', { class: 'hint', text: 'Nenhum evento enviado ainda. Faça um pedido de teste (ou use "testar conexão" acima).' })); return; }
+    data.forEach((l) => {
+      const ok = l.status_code >= 200 && l.status_code < 300;
+      const recebidos = (l.response && l.response.events_received) || 0;
+      const erro = l.response && l.response.error && (l.response.error.error_user_msg || l.response.error.message);
+      const quando = (() => { try { return new Date(l.criado_em).toLocaleString('pt-BR'); } catch (e) { return ''; } })();
+      const det = el('details');
+      det.append(
+        el('summary', { style: 'cursor:pointer;font-weight:700;font-size:.86rem;color:' + (ok ? '#1d894e' : 'var(--danger)'), text: (ok ? '✓ Recebido pelo Meta · ' + recebidos + ' evento(s)' : '✗ ' + (erro || 'Falhou (HTTP ' + l.status_code + ')')) + ' · ' + (l.event_name || '') + ' · ' + quando }),
+        el('pre', { style: 'font-size:.68rem;overflow-x:auto;background:var(--surface-2);padding:8px;border-radius:8px;margin-top:6px;white-space:pre-wrap;word-break:break-all', text: JSON.stringify({ enviado: l.payload, resposta: l.response }, null, 2) }),
+      );
+      box.append(el('div', { class: 'opt-group', style: 'margin-bottom:8px' }, det));
+    });
+  })();
+  return card;
 }
 
 // ---------------------------------------------------------------- Acessos (logins do painel)

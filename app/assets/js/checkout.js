@@ -7,7 +7,7 @@ import { el, money, toast, maskPhone, phoneCanon, phoneValido, ICON_WHATS } from
 import * as cart from './cart.js';
 import { getStore, getSettings, isOpenNow, tempoEntrega, tempoRetirada, submitOrder, openOrdersCount, validarCupom, captureLead, customerLogin, taxaBairro, sugestaoBairro } from './data.js';
 import { getAttribution, clearAttribution } from './attribution.js';
-import { track } from './tracking.js';
+import { track, capiPurchase } from './tracking.js';
 
 const PAGAMENTOS = {
   pix: { nome: 'PIX na entrega', emoji: '⚡' },
@@ -270,8 +270,10 @@ export function openCheckout({ openOrders: ooInicial = 0 } = {}) {
     try {
       const res = await submitOrder(order);
       order.id = res.id; order.numero = res.numero;
-      // purchase so conta venda CONFIRMADA no backend (no fallback WhatsApp nao ha id estavel)
-      if (res.via === 'supabase' && res.id) track.purchase(order);
+      // purchase so conta venda CONFIRMADA no backend (no fallback WhatsApp nao ha id
+      // estavel). Pixel (navegador) + CAPI proprio (servidor) com o MESMO event_id
+      // (venda_{id}) -> o Meta deduplica.
+      if (res.via === 'supabase' && res.id) { track.purchase(order); capiPurchase(order); }
       // guarda o pedido no aparelho pra ele acompanhar o status no cardápio
       if (res.id) {
         try {

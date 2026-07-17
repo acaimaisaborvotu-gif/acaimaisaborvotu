@@ -14,6 +14,8 @@ import { captureAttribution, trackVisit } from './attribution.js';
 // antes de qualquer navegação. Fica salva no aparelho até a pessoa comprar.
 captureAttribution();
 trackVisit('pageview');
+// PageView server-side fica DESLIGADO por ora (evita PageView em dobro no Meta): o
+// Pixel dispara o do navegador com {{Api Event ID}}. Pra religar, ver CAPI_EVENTS em tracking.js.
 // Marca "adicionou ao carrinho" 1x por sessão (alimenta o funil por origem).
 let _addCartTracked = false;
 const markAddCart = () => { if (!_addCartTracked) { _addCartTracked = true; trackVisit('add_cart'); } };
