@@ -24,6 +24,18 @@ const cookie = (n) => { try { return (document.cookie.match('(^|;)\\s*' + n + '\
 const newEventId = () =>
   (crypto.randomUUID ? crypto.randomUUID() : Date.now() + '-' + Math.random().toString(36).slice(2));
 
+// external_id ESTÁVEL do cliente: um id anônimo persistente (localStorage), o MESMO
+// em todo evento e no navegador + servidor. Costura a jornada (view -> lead -> compra
+// -> recompra) e sobe a qualidade de correspondência (EMQ). NÃO é dado pessoal; o
+// servidor hasheia antes de mandar pro Meta.
+function externalId() {
+  try {
+    let v = localStorage.getItem('ams_uid');
+    if (!v) { v = newEventId(); localStorage.setItem('ams_uid', v); }
+    return v;
+  } catch (e) { return undefined; }
+}
+
 // eventId opcional: quando o evento tem um id ESTÁVEL (ex: purchase = venda_{id do
 // pedido}), passar aqui. Assim o Pixel do navegador e o nosso CAPI (server) mandam
 // o MESMO event_id e o Meta deduplica; e reenvio não vira compra nova.
@@ -59,6 +71,7 @@ function capiMirror(event, eventId, ecommerce, extra) {
         contents: items.length ? items.map((i) => ({ id: i.item_id, quantity: i.quantity, item_price: i.price })) : undefined,
         content_name: items.length ? items.map((i) => i.item_name).filter(Boolean).join(', ') : undefined,
         user_data: { phone: ud.phone_number, first_name: ud.first_name, last_name: ud.last_name },
+        external_id: externalId(),
         fbp: cookie('_fbp') || undefined, fbc: cookie('_fbc') || undefined,
         fbclid: new URLSearchParams(location.search).get('fbclid') || undefined,
         event_source_url: location.href,
@@ -84,7 +97,7 @@ export const track = {
     const n = (nome || '').trim();
     push('generate_lead', {}, {
       lead_stage: stage,
-      user_data: { phone_number: phoneE164(telefone), first_name: n.split(' ')[0] || undefined },
+      user_data: { phone_number: phoneE164(telefone), first_name: n.split(' ')[0] || undefined, last_name: n.split(' ').slice(1).join(' ') || undefined },
     });
   },
   viewItem(item) {
@@ -99,8 +112,15 @@ export const track = {
   beginCheckout(items, value, coupon) {
     push('begin_checkout', { currency: 'BRL', value, coupon: coupon || undefined, items: items.map(lineToGA) });
   },
-  addPaymentInfo(items, value, payment_type, coupon) {
-    push('add_payment_info', { currency: 'BRL', value, payment_type, coupon: coupon || undefined, items: items.map(lineToGA) });
+  // No passo do pagamento o nome+telefone JÁ foram validados (passo 1), então mandamos
+  // o user_data junto pra não desperdiçar match nesse evento de fundo de funil.
+  addPaymentInfo(items, value, payment_type, coupon, telefone, nome) {
+    const n = (nome || '').trim();
+    const ud = {};
+    if (telefone) ud.phone_number = phoneE164(telefone);
+    if (n) { ud.first_name = n.split(' ')[0] || undefined; ud.last_name = n.split(' ').slice(1).join(' ') || undefined; }
+    push('add_payment_info', { currency: 'BRL', value, payment_type, coupon: coupon || undefined, items: items.map(lineToGA) },
+      Object.keys(ud).length ? { user_data: ud } : {});
   },
   purchase(order) {
     const nome = (order.customer?.nome || '').trim();
@@ -136,6 +156,7 @@ export function capiPurchase(order) {
       body: JSON.stringify({
         store: CONFIG.STORE_ID,
         order_id: order.id,
+        external_id: externalId(),
         fbp: cookie('_fbp') || undefined,
         fbc: cookie('_fbc') || undefined,
         fbclid: fbclid || undefined,

@@ -239,7 +239,7 @@ export function openCheckout({ openOrders: ooInicial = 0 } = {}) {
     setFoot(label, async () => {
       if (!aberto) return toast('Estamos fechados no momento');
       if (abaixoMin) return toast(`Pedido mínimo de ${money(min)}`);
-      if (!paymentInfoEnviado) { paymentInfoEnviado = true; track.addPaymentInfo(items, total(), state.metodo, state.cupom?.codigo); }
+      if (!paymentInfoEnviado) { paymentInfoEnviado = true; track.addPaymentInfo(items, total(), state.metodo, state.cupom?.codigo, state.telefone, state.nome); }
       await finalize();
     }, !aberto || abaixoMin);
   }

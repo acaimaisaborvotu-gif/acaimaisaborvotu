@@ -76,10 +76,11 @@ function montarEvento(o, b, ipAddr, uaStr) {
   if (nome[0]) ud.fn = [sha256(nome[0])];
   if (nome.length > 1) ud.ln = [sha256(nome[nome.length - 1])];
   ud.ct = [sha256('votuporanga')];
-  const uf = DDD_UF[dddDe(o.customer_phone)];
-  if (uf) ud.st = [sha256(uf)];
+  ud.st = [sha256('sp')];            // loja de Votuporanga/SP: st fixo coerente com o ct fixo
   ud.country = [sha256('br')];
-  ud.external_id = [sha256(o.id)];
+  // external_id = id ESTÁVEL do cliente (uid do navegador). Costura a jornada e sobe a
+  // EMQ; cai pro id do pedido só se o navegador não mandar (ex: reenvio manual).
+  ud.external_id = [sha256(b.external_id || o.id)];
   if (b.fbp) ud.fbp = b.fbp;
   if (b.fbc) ud.fbc = b.fbc;
   else if (fbclid) ud.fbc = 'fb.1.' + Date.now() + '.' + fbclid;
@@ -123,6 +124,7 @@ function montarEventoGenerico(b, ipAddr, uaStr) {
   if (u.first_name) ud.fn = [sha256(u.first_name)];
   if (u.last_name) ud.ln = [sha256(u.last_name)];
   ud.country = [sha256('br')];
+  if (b.external_id) ud.external_id = [sha256(b.external_id)];   // mesmo id estável do funil/Purchase
   if (b.fbp) ud.fbp = b.fbp;
   if (b.fbc) ud.fbc = b.fbc;
   else if (b.fbclid) ud.fbc = 'fb.1.' + Date.now() + '.' + b.fbclid;
