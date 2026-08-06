@@ -18,11 +18,36 @@ const acompGroupsOrdered = () => [...M.ACOMPANHAMENTOS].sort((a, b) => {
   return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
 });
 
-// Acompanhamentos escolhidos, agrupados por categoria (na ordem). [{grupo, itens:[{nome,qtd}]}]
+// Nomes que existem em mais de um grupo (ex.: "Morango" está em Frutas, Mousses,
+// Sorvetes e Coberturas). Na comanda o item sai dentro da seção do grupo, mas um
+// "Morango" solto já fez a produção mandar a fruta no lugar da mousse: esses ganham
+// a categoria colada no nome. Lê o cardápio corrente, então acompanha edição no painel.
+const acompAmbiguos = () => {
+  const vezes = new Map();
+  M.ACOMPANHAMENTOS.forEach((g) => g.itens.forEach((i) => vezes.set(i.nome, (vezes.get(i.nome) || 0) + 1)));
+  return new Set([...vezes].filter(([, n]) => n > 1).map(([n]) => n));
+};
+
+// "Mousses" -> "Mousse", "Coberturas" -> "Cobertura", "Adicionais" -> "Adicional"
+const singularGrupo = (s) => (/is$/i.test(s) ? s.replace(/is$/i, 'l') : s.replace(/s$/i, ''));
+
+// "Morango" no grupo Mousses -> "Mousse Morango". Se o nome já traz a palavra
+// ("Creme de Avelã" em Cremes), fica como está pra não virar "Creme Creme de Avelã".
+const rotuloAcomp = (grupo, nome, ambiguos) => {
+  if (!ambiguos.has(nome)) return nome;
+  const pre = singularGrupo(grupo);
+  const jaTem = new RegExp('\\b' + pre.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i').test(nome);
+  return jaTem ? nome : pre + ' ' + nome;
+};
+
+// Acompanhamentos escolhidos, agrupados por categoria (na ordem).
+// [{grupo, itens:[{nome, rotulo, qtd}]}] — `nome` é o cru (relatório), `rotulo` é o que sai impresso.
 function acompGrouped(state) {
   const out = [];
+  const ambiguos = acompAmbiguos();
   acompGroupsOrdered().forEach((g) => {
-    const itens = g.itens.filter((it) => (state.acomp.get(it.id) || 0) > 0).map((it) => ({ nome: it.nome, qtd: state.acomp.get(it.id) }));
+    const itens = g.itens.filter((it) => (state.acomp.get(it.id) || 0) > 0)
+      .map((it) => ({ nome: it.nome, rotulo: rotuloAcomp(g.nome, it.nome, ambiguos), qtd: state.acomp.get(it.id) }));
     if (itens.length) out.push({ grupo: g.nome, itens });
   });
   return out;
@@ -342,7 +367,7 @@ export function openProduct(item, onAdd, priceOverride) {
 function buildLine(item, state, unit, temAcomp) {
   // acompanhamentos como seções "Grupo:" + "1x Item" (padrão da impressão)
   const grouped = acompGrouped(state);
-  const acompBlocos = grouped.map((g) => ({ t: 'sec', nome: g.grupo, itens: g.itens.map((i) => `${i.qtd}x ${i.nome}`) }));
+  const acompBlocos = grouped.map((g) => ({ t: 'sec', nome: g.grupo, itens: g.itens.map((i) => `${i.qtd}x ${i.rotulo}`) }));
   const acomps = grouped.flatMap((g) => g.itens.map((i) => ({ nome: i.nome, qtd: i.qtd })));  // estruturado p/ relatório
   const blocos = [];          // lista ordenada: {t:'sec',nome,itens} ou {t:'txt',txt}
   let titulo = item.nome;
