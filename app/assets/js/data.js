@@ -240,10 +240,29 @@ export function secao2() {
         precoDe: it.precoDe ? Number(it.precoDe) : null, raw: { preco: Number(it.preco) || 0 },
       });
     } else if (index[it.refId]) {
-      items.push(index[it.refId]);
+      const base = index[it.refId];
+      const preco = Number(it.preco) > 0 ? Number(it.preco) : null;
+      if (!preco) { items.push(base); continue; }   // sem preço promocional: entra como está
+      // Produto do cardápio em oferta. O preço vale no tamanho de entrada (o menor),
+      // e o modal trava nele. Sem "De" preenchido, risca o preço normal do produto.
+      const de = Number(it.precoDe) > 0 ? Number(it.precoDe) : base.precoFrom;
+      items.push({ ...base, precoFrom: preco, precoDe: de > preco ? de : null, promo: { preco, ml: menorMl(base) } });
     }
   }
   return items.length ? { titulo: s.titulo || 'Promoção', items } : null;
+}
+
+// Menor tamanho oferecido pelo produto (é nele que a promoção fica travada).
+// Produto simples não tem tamanho: devolve null e o preço da oferta vale direto.
+export function menorMl(item) {
+  const m = menu();
+  const listas = item.tipo === 'combo' ? m.RECIPIENTES.filter((r) => r.id === 'copo' || r.id === 'tigela')
+    : item.tipo === 'monte' ? m.RECIPIENTES
+    : item.tipo === 'frape' ? [m.FRAPE]
+    : item.tipo === 'milkshake' ? [m.MILKSHAKE]
+    : [];
+  const mls = listas.flatMap((r) => (r.tamanhos || []).map((t) => Number(t.ml))).filter(Boolean);
+  return mls.length ? Math.min(...mls) : null;
 }
 
 // Upsell da sacola (ofertas que a loja configura). Ignora linhas sem nome.

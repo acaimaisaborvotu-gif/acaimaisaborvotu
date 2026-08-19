@@ -589,7 +589,22 @@ function renderCardapio() {
           el('div', { style: 'display:flex;gap:8px;align-items:center;margin-top:8px' }, [el('label', { style: 'font-size:.82rem;font-weight:700', text: 'De R$' }), de, el('label', { style: 'font-size:.82rem;font-weight:700', text: 'Por R$' }), por]),
         ]));
       } else {
-        s2box.append(el('div', { class: 'menu-item' }, [el('span', { class: 'mi-name', text: nomeProduto(it.refId) }), el('span', { class: 'pill', text: 'do cardápio' }), rm]));
+        // Produto do cardápio em oferta: "Por" vazio = preço normal. Preenchido = promoção,
+        // e o cardápio trava no menor tamanho (é sobre ele que o preço vale).
+        const p = produtos.find((x) => x.id === it.refId);
+        const normal = p ? Number(p.preco) : 0;
+        const de = el('input', { type: 'number', step: '0.50', value: it.precoDe != null ? Number(it.precoDe).toFixed(2) : '', placeholder: money(normal), style: 'width:100px;text-align:right' });
+        de.addEventListener('input', () => it.precoDe = de.value === '' ? null : (parseFloat(de.value) || 0));
+        const por = el('input', { type: 'number', step: '0.50', value: it.preco != null ? Number(it.preco).toFixed(2) : '', placeholder: 'sem promo', style: 'width:100px;text-align:right' });
+        por.addEventListener('input', () => it.preco = por.value === '' ? null : (parseFloat(por.value) || 0));
+        s2box.append(el('div', { style: 'border:1.5px solid var(--line);border-radius:12px;padding:10px;margin:8px 0' }, [
+          el('div', { style: 'display:flex;gap:8px;align-items:center' }, [el('span', { class: 'pill', text: 'do cardápio' }), el('span', { class: 'mi-name', style: 'flex:1', text: nomeProduto(it.refId) }), rm]),
+          el('div', { style: 'display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap' }, [
+            el('label', { style: 'font-size:.82rem;font-weight:700', text: 'De R$' }), de,
+            el('label', { style: 'font-size:.82rem;font-weight:700', text: 'Por R$' }), por,
+          ]),
+          el('p', { class: 'hint', style: 'margin:6px 0 0', text: 'Deixe "Por" vazio pra mostrar o preço normal. Com promoção, vale no menor tamanho e o cliente não troca de tamanho.' }),
+        ]));
       }
     });
   };
@@ -620,8 +635,11 @@ function renderCardapio() {
       const thumb = it.foto ? el('img', { class: 'mi-thumb', src: imgUrl(it.foto, 120, 72), loading: 'lazy', decoding: 'async', onerror: function () { if (this.dataset.orig) this.replaceWith(el('div', { class: 'mi-thumb', html: '<span>🍧</span>' })); else { this.dataset.orig = '1'; this.src = it.foto; } } }) : el('div', { class: 'mi-thumb', html: '<span>🍧</span>' });
       const nome = el('input', { type: 'text', value: it.nome || '', placeholder: 'Nome da oferta', style: 'flex:1;text-align:left' }); nome.addEventListener('input', () => it.nome = nome.value);
       const preco = el('input', { type: 'number', step: '0.50', value: Number(it.preco || 0).toFixed(2), style: 'width:90px;text-align:right' }); preco.addEventListener('input', () => it.preco = parseFloat(preco.value) || 0);
+      // "De" opcional: só pra riscar o preço antigo na sacola. Quem cobra é o "Por".
+      const de = el('input', { type: 'number', step: '0.50', value: it.precoDe != null ? Number(it.precoDe).toFixed(2) : '', placeholder: 'De (opc.)', style: 'width:90px;text-align:right' });
+      de.addEventListener('input', () => it.precoDe = de.value === '' ? null : (parseFloat(de.value) || 0));
       const rm = el('button', { class: 'btn btn-ghost mini', text: '✕', onclick: () => { up.itens.splice(idx, 1); renderUp(); } });
-      upBox.append(el('div', { class: 'menu-item' }, [thumb, nome, preco, fotoBtn((url) => { it.foto = url; renderUp(); }), rm]));
+      upBox.append(el('div', { class: 'menu-item' }, [thumb, nome, de, preco, fotoBtn((url) => { it.foto = url; renderUp(); }), rm]));
     });
   };
   renderUp();

@@ -4,7 +4,7 @@
 
 import { el, money, toast, maskPhone, phoneValido, imgUrl } from './util.js';
 import * as cart from './cart.js';
-import { getStore, getSettings, isOpenNow, nextOpenLabel, buildCatalog, hydrate, secao2, upsellItems, orderStatus, customerLogin, customerOrders } from './data.js';
+import { getStore, getSettings, isOpenNow, nextOpenLabel, buildCatalog, hydrate, secao2, upsellItems, menorMl, orderStatus, customerLogin, customerOrders } from './data.js';
 import { openProduct } from './product-modal.js';
 import { openCheckout } from './checkout.js';
 import { track } from './tracking.js';
@@ -239,9 +239,10 @@ function renderSections() {
   observeSections();
 }
 
+// item.promo ({preco, ml}) vem da seção de ofertas: abre travado no tamanho da promoção.
 function open(item) {
   track.viewItem(item);
-  openProduct(item, (line) => { cart.add(line); track.addToCart(line); toast(`${line.qtd}x adicionado à sacola`); });
+  openProduct(item, (line) => { cart.add(line); track.addToCart(line); toast(`${line.qtd}x adicionado à sacola`); }, item.promo || undefined);
 }
 
 // ---- Sacola (revisão antes do checkout) ----
@@ -297,7 +298,11 @@ function openCart() {
           const precisaEscolher = catItem && (catItem.tipo !== 'simples' || (catItem.raw && Array.isArray(catItem.raw.tipos) && catItem.raw.tipos.filter(Boolean).length));
           if (precisaEscolher) {
             track.viewItem(catItem);
-            openProduct(catItem, (line) => { cart.add(line); track.addToCart(line); paint(); }, Number(u.preco)); // usa o preço da oferta
+            // Montável (combinado, monte, frapê): a oferta trava no tamanho de entrada,
+            // senão o desconto seria ignorado e o cliente pagaria o preço cheio.
+            const ml = catItem.tipo !== 'simples' ? menorMl(catItem) : null;
+            openProduct(catItem, (line) => { cart.add(line); track.addToCart(line); paint(); },
+              ml ? { preco: Number(u.preco) || 0, ml } : Number(u.preco));
             return;
           }
           // Item simples sem escolha (ex: água): 1 clique, preserva o preço da oferta.
@@ -307,7 +312,10 @@ function openCart() {
         });
         upBox.append(el('div', { class: 'opt' }, [
           u.foto ? el('img', { src: imgUrl(u.foto, 120, 72), alt: u.nome, loading: 'lazy', decoding: 'async', style: 'width:46px;height:46px;border-radius:10px;object-fit:cover;flex:none', onerror: function () { if (this.dataset.orig) this.style.display = 'none'; else { this.dataset.orig = '1'; this.src = u.foto; } } }) : null,
-          el('span', { class: 'oname', text: u.nome }), add,
+          Number(u.precoDe) > Number(u.preco)
+            ? el('span', { class: 'oname' }, [document.createTextNode(u.nome + ' '), el('s', { class: 'muted', text: money(u.precoDe) })])
+            : el('span', { class: 'oname', text: u.nome }),
+          add,
         ]));
       });
       body.append(upBox);

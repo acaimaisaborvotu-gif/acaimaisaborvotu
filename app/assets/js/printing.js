@@ -1,6 +1,6 @@
 // =============================================================================
 // IMPRESSÃO TÉRMICA ESC/POS via Web Serial (Chrome/Edge no desktop).
-// Via do entregador (2 vias) + via de produção (1 papel por item).
+// Via do entregador (1 via) + via de produção (1 papel por item).
 // Acentos são normalizados para ASCII p/ sair limpo em qualquer térmica.
 // QZ Tray fica como alternativa (veja docs/GUIA-IMPRESSORA.md).
 // =============================================================================
@@ -42,7 +42,7 @@ function explode(items) {
   return units;
 }
 
-// ---- Via do entregador (2 vias iguais) ----
+// ---- Via do entregador (1 via) ----
 export function deliveryTicket(order, store) {
   const t = new Ticket();
   const totalItens = explode(order.items || []).length;
@@ -265,10 +265,8 @@ export const printer = {
   // ---- Comum ----
   // Imprime: vias do entregador + via das bebidas (grampear junto) + vias de produção (1 por item, sem bebida)
   async printOrder(order, store) {
-    // Entrega = 2 vias do entregador; Retirada = 1 via só.
-    const vias = order.delivery_type === 'retirada'
-      ? [deliveryTicket(order, store)]
-      : [deliveryTicket(order, store), deliveryTicket(order, store)];
+    // 1 via do entregador, tanto na entrega quanto na retirada.
+    const vias = [deliveryTicket(order, store)];
     const bebida = bebidaTicket(order); // sai logo após a via do entregador, pra grampear junto
     const jobs = [...vias, ...(bebida ? [bebida] : []), ...productionTickets(order)];
     if (pcfg.method === 'serial') { for (const j of jobs) { await this.writeSerial(j); await new Promise((r) => setTimeout(r, 250)); } }

@@ -100,7 +100,9 @@ function groupHead(title, sub, tag) {
 }
 
 // Seletor recipiente (segmentado) + tamanhos. NADA pré-selecionado: a pessoa escolhe.
-function sizePicker(recipientes, state, recompute) {
+// soMl (opcional): oferta travada num tamanho (ex: promoção só no 300ml). Só esse
+// tamanho aparece, e já vem marcado, porque não há o que escolher.
+function sizePicker(recipientes, state, recompute, soMl) {
   const wrap = el('div');
   const single = recipientes.length === 1;
   if (single) state.recipienteId = recipientes[0].id;
@@ -110,7 +112,9 @@ function sizePicker(recipientes, state, recompute) {
     sizesBox.innerHTML = '';
     const r = recipientes.find((x) => x.id === state.recipienteId);
     if (!r) { sizesBox.append(el('div', { class: 'opt-hint', text: 'Primeiro escolha copo ou tigela' })); return; }
-    r.tamanhos.forEach((t) => {
+    const tams = soMl ? r.tamanhos.filter((t) => Number(t.ml) === Number(soMl)) : r.tamanhos;
+    if (soMl && tams.length === 1 && state.tamanhoId !== tams[0].id) state.tamanhoId = tams[0].id;
+    tams.forEach((t) => {
       const sel = state.tamanhoId === t.id;
       const row = el('button', { class: 'opt' + (sel ? ' sel' : ''), type: 'button' }, [
         el('span', { class: 'oname', text: `${t.ml}ml` }),
@@ -210,10 +214,15 @@ function bolasGroup(group, state) {
 
 const totalBolas = (state) => [...state.bolas.values()].reduce((a, b) => a + b, 0);
 
-// priceOverride (opcional): preço-base vindo de uma oferta (ex: upsell com desconto),
-// usado no lugar do preço de cardápio nos itens simples.
+// priceOverride (opcional): preço vindo de uma oferta. Aceita dois formatos:
+//   número            -> preço-base do item simples (ex: água a R$3 no upsell)
+//   {preco, ml}       -> promoção de produto montável, TRAVADA num tamanho (ex: combinado
+//                        a R$17,90 só no 300ml). O preço já cobre base + tamanho; extras
+//                        (acompanhamentos, sabor a mais) somam por cima.
 export function openProduct(item, onAdd, priceOverride) {
   M = menu();
+  const promo = priceOverride && typeof priceOverride === 'object' ? priceOverride : null;
+  const promoMl = promo ? Number(promo.ml) || null : null;
   const { body, foot, destroy } = overlayShell(item);
   const state = { recipienteId: null, tamanhoId: null, bases: new Set(), acomp: new Map(), sabores: new Set(), bolas: new Map(), tipo: null, obs: '', qtd: 1 };
   const temAcomp = item.tipo === 'simples' && item.raw && item.raw.acomp;
@@ -224,13 +233,13 @@ export function openProduct(item, onAdd, priceOverride) {
   if (item.desc) body.append(el('div', { class: 'sheet-desc', text: item.desc }));
 
   if (item.tipo === 'monte') {
-    const g1 = el('div', { class: 'opt-group' }); g1.append(groupHead('Tamanho', null, 'req'), sizePicker(M.RECIPIENTES, state, () => recompute()));
+    const g1 = el('div', { class: 'opt-group' }); g1.append(groupHead('Tamanho', promoMl ? `Promoção no ${promoMl}ml` : null, 'req'), sizePicker(M.RECIPIENTES, state, () => recompute(), promoMl));
     body.append(g1);
     body.append(baseGroup(state));
     acompGroupsOrdered().forEach((g) => body.append(acompGroup(g, state)));
   } else if (item.tipo === 'combo') {
     const recs = comboRecips();
-    const g1 = el('div', { class: 'opt-group' }); g1.append(groupHead('Tamanho', 'Copo ou tigela', 'req'), sizePicker(recs, state, () => recompute()));
+    const g1 = el('div', { class: 'opt-group' }); g1.append(groupHead('Tamanho', promoMl ? `Promoção no ${promoMl}ml` : 'Copo ou tigela', 'req'), sizePicker(recs, state, () => recompute(), promoMl));
     body.append(g1);
     body.append(baseGroup(state));
     const extras = el('div', { class: 'opt-group' });
@@ -238,12 +247,12 @@ export function openProduct(item, onAdd, priceOverride) {
     body.append(extras);
     acompGroupsOrdered().forEach((g) => body.append(acompGroup(g, state)));
   } else if (item.tipo === 'frape') {
-    const g1 = el('div', { class: 'opt-group' }); g1.append(groupHead('Tamanho', null, 'req'), sizePicker([{ id: 'frape', nome: 'Frapê', tamanhos: M.FRAPE.tamanhos }], state, () => recompute()));
+    const g1 = el('div', { class: 'opt-group' }); g1.append(groupHead('Tamanho', promoMl ? `Promoção no ${promoMl}ml` : null, 'req'), sizePicker([{ id: 'frape', nome: 'Frapê', tamanhos: M.FRAPE.tamanhos }], state, () => recompute(), promoMl));
     body.append(g1);
     body.append(baseGroup(state));
     acompGroupsOrdered().forEach((g) => body.append(acompGroup(g, state)));
   } else if (item.tipo === 'milkshake') {
-    const g1 = el('div', { class: 'opt-group' }); g1.append(groupHead('Tamanho', null, 'req'), sizePicker([{ id: 'milk', nome: 'Milk-shake', tamanhos: M.MILKSHAKE.tamanhos }], state, () => recompute()));
+    const g1 = el('div', { class: 'opt-group' }); g1.append(groupHead('Tamanho', promoMl ? `Promoção no ${promoMl}ml` : null, 'req'), sizePicker([{ id: 'milk', nome: 'Milk-shake', tamanhos: M.MILKSHAKE.tamanhos }], state, () => recompute(), promoMl));
     body.append(g1);
     const gs = el('div', { class: 'opt-group' });
     const msSub = ((M.textos || {}).msSaboresDesc || '1º incluso. Cada sabor a mais: + {valor}').replace('{valor}', money(M.MILKSHAKE.precoSaborExtra ?? 5));
@@ -316,6 +325,15 @@ export function openProduct(item, onAdd, priceOverride) {
   function precoUnit() {
     let p = 0;
     if (item.tipo === 'simples') { p = Number.isFinite(priceOverride) ? priceOverride : item.raw.preco; if (temAcomp) p += acompSum(); return p; }
+    // Promoção de montável: o preço da oferta substitui base + tamanho (que está travado).
+    // O que a pessoa acrescenta depois (acompanhamento, sabor extra, bola extra) soma por cima.
+    if (promo) {
+      p = Number(promo.preco) || 0;
+      if (item.tipo === 'milkshake') p += Math.max(0, state.sabores.size - 1) * (M.MILKSHAKE.precoSaborExtra ?? 5);
+      else if (item.tipo === 'sorvete') p += Math.max(0, totalBolas(state) - 1) * (item.raw.precoBolaExtra ?? 3.5) + acompSum();
+      else p += acompSum();
+      return p;
+    }
     if (item.tipo === 'combo') p += item.raw.valorBase;
     if (item.tipo === 'monte' || item.tipo === 'combo' || item.tipo === 'frape') {
       const recs = item.tipo === 'combo' ? comboRecips() : item.tipo === 'frape' ? [{ tamanhos: M.FRAPE.tamanhos }] : M.RECIPIENTES;
