@@ -291,6 +291,28 @@ export function validarCupom(codigo, subtotal) {
   return { ok: true, codigo: code, tipo: c.tipo, valor: Number(c.valor) || 0, desconto, primeiraCompra: !!c.primeiraCompra, msg: `Cupom ${code} aplicado` };
 }
 
+// Valida o cupom NO SERVIDOR (migração 0024). É a mesma função que o place_order
+// usa pra decidir, então o que a tela mostra é exatamente o que vai ser cobrado:
+// não dá pra tela aprovar e o pedido ser recusado depois (nem o contrário).
+// Sem Supabase (modo seed), cai na conta local do validarCupom().
+export async function validarCupomServidor(codigo, subtotal, telefone) {
+  const code = (codigo || '').trim().toUpperCase();
+  if (!code) return { ok: false, msg: 'Digite um cupom' };
+  if (!hasSupabase()) return validarCupom(codigo, subtotal);
+  try {
+    const client = await sb();
+    const { data, error } = await client.rpc('cupom_validar', {
+      p: { store_slug: CONFIG.STORE_ID, codigo: code, subtotal, phone: telefone || null },
+    });
+    if (error) return validarCupom(codigo, subtotal);   // RPC ainda não instalada: não trava a venda
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row) return { ok: false, msg: 'Cupom inválido ou expirado' };
+    if (!row.ok) return { ok: false, msg: row.motivo || 'Cupom inválido ou expirado' };
+    const desconto = Number(row.desconto) || 0;
+    return { ok: true, codigo: code, desconto, msg: `Cupom ${code} aplicado` };
+  } catch (e) { return validarCupom(codigo, subtotal); }
+}
+
 // ---- Acompanhamento de pedido (cliente) ----
 // Recebe o id (uuid) devolvido no envio e busca o status atual via RPC pública.
 export async function orderStatus(id) {

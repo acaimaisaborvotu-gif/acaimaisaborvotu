@@ -658,7 +658,7 @@ function renderCardapio() {
 
   // Cupons de desconto
   menu.cupons = menu.cupons || [];
-  const cupCard = el('div', { class: 'panel-card' }, [el('h3', { text: 'Cupons de desconto' }), el('p', { class: 'hint', text: 'O cliente digita o código no checkout. % desconta sobre o subtotal; R$ desconta um valor fixo. Mínimo = subtotal mínimo pra valer (0 = sem mínimo). Desmarque pra desativar sem apagar.' })]);
+  const cupCard = el('div', { class: 'panel-card' }, [el('h3', { text: 'Cupons de desconto' }), el('p', { class: 'hint', text: 'O cliente digita o código no checkout. % desconta sobre o subtotal; R$ desconta um valor fixo. Mínimo = subtotal mínimo pra valer (0 = sem mínimo). "1ª compra": só quem nunca pediu. "1x por pessoa": qualquer cliente, mas uma vez só. Desmarque pra desativar sem apagar.' })]);
   const cupBox = el('div');
   const renderCup = () => {
     cupBox.innerHTML = '';
@@ -673,10 +673,14 @@ function renderCardapio() {
       const minimo = el('input', { type: 'number', step: '1', value: Number(c.minimo || 0), placeholder: 'Mín', style: 'width:64px;text-align:right' }); minimo.addEventListener('input', () => c.minimo = parseFloat(minimo.value) || 0);
       const ativo = el('input', { type: 'checkbox' }); ativo.checked = c.ativo !== false; ativo.addEventListener('change', () => c.ativo = ativo.checked);
       const primeira = el('input', { type: 'checkbox' }); primeira.checked = !!c.primeiraCompra; primeira.addEventListener('change', () => c.primeiraCompra = primeira.checked);
+      // "1x por pessoa" é diferente de "1ª compra": aqui o cliente antigo PODE usar,
+      // mas só uma vez. Quem valida de verdade é o banco (migração 0024).
+      const unico = el('input', { type: 'checkbox' }); unico.checked = !!c.usoUnico; unico.addEventListener('change', () => c.usoUnico = unico.checked);
       const rm = el('button', { class: 'btn btn-ghost mini', text: '✕', onclick: () => { menu.cupons.splice(idx, 1); renderCup(); } });
       cupBox.append(el('div', { class: 'menu-item', style: 'flex-wrap:wrap;gap:6px' }, [
         cod, tipo, valor, el('span', { class: 'hint', style: 'margin:0', text: 'mín' }), minimo,
         el('label', { style: 'display:flex;align-items:center;gap:4px;flex:0 0 auto', title: 'Vale só na primeira compra do cliente' }, [primeira, el('span', { class: 'hint', style: 'margin:0', text: '1ª compra' })]),
+        el('label', { style: 'display:flex;align-items:center;gap:4px;flex:0 0 auto', title: 'Cada cliente só pode usar esse cupom uma vez (mesmo quem já compra há tempos)' }, [unico, el('span', { class: 'hint', style: 'margin:0', text: '1x por pessoa' })]),
         el('label', { class: 'switch', style: 'flex:0 0 auto' }, [ativo, el('span')]), rm,
       ]));
     });

@@ -5,7 +5,7 @@
 
 import { el, money, toast, maskPhone, phoneCanon, phoneValido, ICON_WHATS } from './util.js';
 import * as cart from './cart.js';
-import { getStore, getSettings, isOpenNow, tempoEntrega, tempoRetirada, submitOrder, openOrdersCount, validarCupom, captureLead, customerLogin, taxaBairro, sugestaoBairro } from './data.js';
+import { getStore, getSettings, isOpenNow, tempoEntrega, tempoRetirada, submitOrder, openOrdersCount, validarCupomServidor, captureLead, taxaBairro, sugestaoBairro } from './data.js';
 import { getAttribution, clearAttribution } from './attribution.js';
 import { track, capiPurchase } from './tracking.js';
 
@@ -206,12 +206,11 @@ export function openCheckout({ openOrders: ooInicial = 0 } = {}) {
     } else {
       const inp = el('input', { style: inputStyle + ';text-transform:uppercase;flex:1', placeholder: 'Tem um cupom? Digite aqui', value: '' });
       const aplicar = async () => {
-        const r = validarCupom(inp.value, sub);
+        // O servidor decide (migração 0024): é a MESMA regra que o place_order aplica,
+        // então o que aparece aqui é o que vai ser cobrado. Cobre mínimo, cupom
+        // desativado, "1ª compra" e "1x por pessoa".
+        const r = await validarCupomServidor(inp.value, sub, state.telefone);
         if (!r.ok) return toast(r.msg);
-        if (r.primeiraCompra) {
-          const c = await customerLogin(state.telefone, state.nome);
-          if (c && c.found && c.orders_count > 0) return toast('Esse cupom vale só na primeira compra.');
-        }
         state.cupom = r; toast(r.msg); render();
       };
       inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); aplicar(); } });
@@ -292,6 +291,15 @@ export function openCheckout({ openOrders: ooInicial = 0 } = {}) {
     } catch (e) {
       console.error(e);
       btn.disabled = false; btn.innerHTML = `Enviar pedido • ${money(total())}`;
+      // Cupom recusado pelo servidor (ex: usou entre montar o pedido e enviar):
+      // tira o cupom, explica o motivo e deixa ele reenviar sem perder a sacola.
+      const msg = String(e?.message || '');
+      if (msg.includes('CUPOM_INVALIDO')) {
+        state.cupom = null;
+        toast(msg.split('CUPOM_INVALIDO:').pop().trim() || 'Cupom inválido');
+        render();
+        return;
+      }
       toast('Não consegui enviar. Tente de novo.');
     }
   }
