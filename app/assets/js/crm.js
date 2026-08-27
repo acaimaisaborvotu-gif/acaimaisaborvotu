@@ -10,7 +10,7 @@ let _client = null, _store = '', _storeNome = '', _templates = {};
 let _host = null;
 let _isOwner = false;               // só o dono pode cancelar pedido
 let aba = 'clientes';                 // 'clientes' | 'abandonos'
-const f = { sort: 'oldest', minDays: null, onlyNew: false, onlyAband: false, search: '', offset: 0, limit: 50 };
+const f = { sort: 'oldest', minDays: null, onlyNew: false, onlyAband: false, onlyPendentes: false, search: '', offset: 0, limit: 50 };
 const ab = { hours: 720 };            // janela dos abandonos
 
 // Mensagens padrão (a loja edita no painel). {nome} = 1º nome, {loja} = nome da loja.
@@ -82,7 +82,7 @@ function paintClientes() {
 
   const reload = async () => {
     corpo.innerHTML = ''; corpo.append(el('p', { class: 'hint', text: 'Carregando...' }));
-    const rows = await rpc('crm_customers', { p_store: _store, p_search: f.search || null, p_only_abandoned: f.onlyAband, p_min_days: f.minDays, p_only_new: f.onlyNew, p_sort: f.sort, p_limit: f.limit, p_offset: f.offset });
+    const rows = await rpc('crm_customers', { p_store: _store, p_search: f.search || null, p_only_abandoned: f.onlyAband, p_min_days: f.minDays, p_only_new: f.onlyNew, p_sort: f.sort, p_limit: f.limit, p_offset: f.offset, p_only_pendentes: f.onlyPendentes });
     corpo.innerHTML = '';
     if (!rows.length) {
       corpo.append(vazio(f.offset > 0 ? 'Fim da lista.' : 'Nenhum cliente nesse filtro.'));
@@ -90,7 +90,7 @@ function paintClientes() {
       if (f.offset > 0) pager.append(el('button', { class: 'btn btn-ghost mini', text: '‹ Anterior', onclick: () => { f.offset = Math.max(0, f.offset - f.limit); reload(); } }));
       return;
     }
-    const head = el('tr', {}, ['Cliente', 'Pedidos', 'Total gasto', 'Último pedido', 'Situação', ''].map((h) => el('th', { text: h })));
+    const head = el('tr', {}, ['Cliente', 'Pedidos', 'Total gasto', 'Último pedido', 'Situação', 'Contato', ''].map((h) => el('th', { text: h })));
     const body = rows.map(customerRow);
     corpo.append(el('table', { class: 'atrib-table crm-table' }, [el('thead', {}, head), el('tbody', {}, body)]));
     pager.innerHTML = '';
@@ -115,16 +115,42 @@ function paintClientes() {
     chipsBar.innerHTML = '';
     const set = (fn) => { fn(); f.offset = 0; renderChips(); reload(); };
     chipsBar.append(
-      chip('Todos', !f.minDays && !f.onlyNew && !f.onlyAband, () => set(() => { f.minDays = null; f.onlyNew = false; f.onlyAband = false; })),
-      chip('Novos', f.onlyNew, () => set(() => { f.onlyNew = true; f.minDays = null; f.onlyAband = false; })),
-      chip('Sumidos +30d', f.minDays === 30, () => set(() => { f.minDays = 30; f.onlyNew = false; f.onlyAband = false; })),
-      chip('🛒 Carrinho aberto', f.onlyAband, () => set(() => { f.onlyAband = true; f.minDays = null; f.onlyNew = false; })),
+      chip('Todos', !f.minDays && !f.onlyNew && !f.onlyAband && !f.onlyPendentes, () => set(() => { f.minDays = null; f.onlyNew = false; f.onlyAband = false; f.onlyPendentes = false; })),
+      chip('Novos', f.onlyNew, () => set(() => { f.onlyNew = true; f.minDays = null; f.onlyAband = false; f.onlyPendentes = false; })),
+      chip('Sumidos +30d', f.minDays === 30 && !f.onlyPendentes, () => set(() => { f.minDays = 30; f.onlyNew = false; f.onlyAband = false; f.onlyPendentes = false; })),
+      chip('🛒 Carrinho aberto', f.onlyAband, () => set(() => { f.onlyAband = true; f.minDays = null; f.onlyNew = false; f.onlyPendentes = false; })),
+      // Fila de reativação: sumidos que ele ainda NÃO contatou (ou cujo contato já
+      // venceu / o cliente pediu depois). É o que resolve o "não sei onde parei".
+      chip('✓ Falta contatar', f.onlyPendentes, () => set(() => { f.onlyPendentes = true; f.minDays = 30; f.onlyNew = false; f.onlyAband = false; })),
     );
   };
   renderChips();
 
   wrap.append(el('div', { class: 'crm-toolbar' }, [busca, ordenar, qtd]), chipsBar, corpo, pager);
   reload();
+}
+
+// Grava o contato e atualiza a linha na hora (sem recarregar a lista, pra ele não
+// perder a rolagem no meio da fila).
+async function marcarContato(c, valor) {
+  const quando = await rpc('crm_marcar_contato', { p_store: _store, p_phone: c.phone, p_value: valor });
+  c.contatado = !!valor;
+  c.contatado_em = valor ? (quando || new Date().toISOString()) : null;
+  c.dias_desde_contato = valor ? 0 : null;
+  const td = document.querySelector(`[data-contato="${c.phone}"]`);
+  if (td) td.replaceWith(contatoCell(c));
+  toast(valor ? 'Marcado como contatado' : 'Contato desmarcado');
+}
+
+// Caixinha "já falei com essa pessoa" + quando foi.
+function contatoCell(c) {
+  const chk = el('input', { type: 'checkbox', style: 'width:17px;height:17px;accent-color:var(--ok);cursor:pointer' });
+  chk.checked = !!c.contatado;
+  chk.addEventListener('click', (e) => { e.stopPropagation(); marcarContato(c, chk.checked); });
+  const d = c.dias_desde_contato;
+  const legenda = !c.contatado ? el('small', { class: 'muted', style: 'display:block;font-size:.7rem', text: 'falta' })
+    : el('small', { class: 'muted', style: 'display:block;font-size:.7rem', text: d === 0 ? 'hoje' : d === 1 ? 'ontem' : 'há ' + d + ' dias' });
+  return el('td', { 'data-contato': c.phone, onclick: (e) => e.stopPropagation() }, [chk, legenda]);
 }
 
 function customerRow(c) {
@@ -137,8 +163,12 @@ function customerRow(c) {
     el('td', { class: 'num', text: money(c.total_spent) }),
     el('td', {}, el('span', { class: recCls, text: recTxt })),
     el('td', {}, el('span', { class: 'st-badge ' + stCls, text: stTxt })),
+    contatoCell(c),
     el('td', { class: 'crm-acoes' }, [
-      c.opt_out ? null : el('a', { class: 'btn btn-whats mini', href: wa(c.phone, fill(template('inativo'), nome)), target: '_blank', rel: 'noopener', title: 'WhatsApp', html: '💬', onclick: (e) => e.stopPropagation() }),
+      // Abrir o WhatsApp JÁ marca como contatado: senão ele teria que lembrar de
+      // fazer duas coisas, que é justamente o que se perde no meio do atendimento.
+      c.opt_out ? null : el('a', { class: 'btn btn-whats mini', href: wa(c.phone, fill(template('inativo'), nome)), target: '_blank', rel: 'noopener', title: 'WhatsApp', html: '💬',
+        onclick: (e) => { e.stopPropagation(); marcarContato(c, true); } }),
       el('button', { class: 'btn btn-ghost mini', text: 'Ver', onclick: (e) => { e.stopPropagation(); openDrawer(c); } }),
     ]),
   ]);
@@ -175,7 +205,9 @@ async function openDrawer(c) {
     const diasUlt = ultimo ? diasDesde(ultimo) : null;
 
     body.innerHTML = '';
-    body.append(el('a', { class: 'btn btn-whats btn-block', href: wa(c.phone, fill(template('inativo'), c.name)), target: '_blank', rel: 'noopener', html: '💬 Mandar WhatsApp' }));
+    // Mesma regra da lista: mandar mensagem daqui também marca como contatado.
+    body.append(el('a', { class: 'btn btn-whats btn-block', href: wa(c.phone, fill(template('inativo'), c.name)), target: '_blank', rel: 'noopener', html: '💬 Mandar WhatsApp',
+      onclick: () => marcarContato(c, true) }));
 
     // Mini-resumo do cliente.
     body.append(el('div', { class: 'kpi-grid', style: 'margin:12px 0' }, [
