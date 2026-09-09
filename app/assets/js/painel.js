@@ -85,6 +85,22 @@ async function loadOrders() {
     .gte('created_at', new Date(Date.now() - 86400000).toISOString())
     .order('created_at', { ascending: false });
   orders = data || [];
+  await marcarClientesNovos(orders);
+}
+
+// Marca os pedidos que são o PRIMEIRO daquele telefone. Serve de alerta antes de
+// despachar entrega: foi assim que um trote levou o entregador até uma clínica
+// (26/08/2026). Uma chamada só pra todos os telefones da tela.
+async function marcarClientesNovos(lista) {
+  const phones = [...new Set((lista || []).map((o) => o.customer_phone).filter(Boolean))];
+  if (!phones.length) return;
+  try {
+    const { data, error } = await client.rpc('orders_pedidos_por_telefone', { p_store: STORE_SLUG, p_phones: phones });
+    if (error) return;                       // migração 0026 ainda não rodou: segue sem o selo
+    const so = (t) => String(t || '').replace(/\D/g, '').replace(/^55/, '');
+    const mapa = new Map((data || []).map((r) => [so(r.phone), Number(r.pedidos) || 0]));
+    lista.forEach((o) => { o._pedidosDoCliente = mapa.get(so(o.customer_phone)); });
+  } catch (e) {}
 }
 
 function subscribeOrders() {
@@ -325,6 +341,11 @@ function orderCard(o) {
     el('div', { class: 'obody' }, [
       el('div', { class: 'ocust', text: o.customer_name }),
       el('div', { class: 'oinfo', text: `${o.customer_phone} · ${o.delivery_type === 'retirada' ? 'Retirada' : 'Entrega'}` }),
+      // 1º pedido desse telefone: confira antes de mandar o entregador.
+      o._pedidosDoCliente === 1
+        ? el('div', { class: 'oinfo', style: 'background:rgba(232,150,0,.14);color:#a06400;border-radius:8px;padding:5px 8px;font-weight:700;margin:4px 0',
+            text: o.delivery_type === 'retirada' ? '⚠ 1º pedido desse número' : '⚠ 1º pedido desse número, confirme antes de sair' })
+        : null,
       o.address ? el('div', { class: 'oinfo', text: '📍 ' + o.address }) : null,
       (() => {
         const tempo = o.eta_max || o.eta_min;
