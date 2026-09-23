@@ -5,11 +5,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="robots" content="noindex" />
   <title>Açaí Mais Sabor</title>
-  <!-- Link da BIO do Instagram. Carimba a origem e manda pro cardápio. -->
-  <meta http-equiv="refresh" content="0; url=/?utm_source=instagram&utm_medium=bio&utm_campaign=link_bio" />
-  <script>location.replace('/?utm_source=instagram&utm_medium=bio&utm_campaign=link_bio');</script>
+  <!-- Link ANTIGO da bio do Instagram. Hoje a bio é /ig; este caminho continua vivo
+       para quem tiver o link salvo, e a única função dele é levar a pessoa ao /ig
+       SEM PERDER NADA da query (fbclid, utm) que o Instagram carimbou.
+
+       Por que não é um 302 no _redirects: medido em 23/09/2026, o Netlify descarta
+       a query que chega quando o destino já tem a sua. Aqui o repasse é explícito,
+       então não depende do comportamento da plataforma. -->
+  <script>
+    (function () {
+      var q = location.search || '';
+      location.replace('/ig' + q + location.hash);
+    })();
+  </script>
+  <noscript><meta http-equiv="refresh" content="0; url=/ig" /></noscript>
 </head>
 <body style="font-family:system-ui,sans-serif;background:#38103d;color:#fff;display:grid;place-items:center;height:100vh;margin:0">
-  Abrindo o cardápio...
+  Abrindo...
 </body>
 </html>

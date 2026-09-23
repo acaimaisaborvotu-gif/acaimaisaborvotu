@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Açaí Mais Sabor | Votuporanga</title>
+<meta name="description" content="Peça seu açaí no Açaí Mais Sabor, Votuporanga. Cardápio, WhatsApp e avaliação no Google." />
+<meta name="theme-color" content="#38103d" />
+<meta name="robots" content="noindex, follow" />
+<link rel="icon" type="image/png" href="/assets/img/logo-fita.png" />
+<link rel="apple-touch-icon" href="/assets/img/logo-fita.png" />
+<link rel="preload" as="image" href="logo.webp" />
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="Açaí Mais Sabor" />
+<meta property="og:locale" content="pt_BR" />
+<meta property="og:url" content="https://acaimaisaborvotu.com.br/ig" />
+<meta property="og:title" content="Açaí Mais Sabor | Votuporanga" />
+<meta property="og:description" content="O Açaí oficial de Votuporanga. Peça pelo cardápio ou chame no WhatsApp." />
+<meta property="og:image" content="https://acaimaisaborvotu.com.br/assets/img/logo.png" />
+
+<!-- ====================== META PIXEL (629750955135545) ======================
+     O mesmo pixel do cardápio. Aqui ele não é só para medir o clique: quando a
+     pessoa chega com fbclid (e o Instagram carimba fbclid em TODO clique da bio),
+     é o fbevents.js que grava o cookie _fbc no domínio. Como o cardápio roda no
+     MESMO domínio, ele lê esse cookie depois e manda no Purchase pelo CAPI.
+     Medido em 23/09/2026: a cobertura de fbc no Purchase era 13,5%.
+     ========================================================================= -->
+<script>
+!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;
+n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;
+t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,
+document,'script','https://connect.facebook.net/en_US/fbevents.js');
+fbq('init', '629750955135545');
+fbq('track', 'PageView');
+</script>
+<noscript><img height="1" width="1" style="display:none"
+src="https://www.facebook.com/tr?id=629750955135545&ev=PageView&noscript=1" /></noscript>
+<!-- ========================================================================= -->
+
+<style>
+  :root{
+    --roxo-900:#38103d;
+    --roxo-800:#4a1052;
+    --roxo-600:#7a2c8f;
+    --magenta:#d6217f;
+    --magenta-dark:#b3186a;
+    --amarelo:#f5c518;
+    --branco:#ffffff;
+    --cinza:#c9b6cf;
+    --ink:#2a1730;
+    --ink-soft:#6b5b72;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--roxo-900);
+    background-image:
+      radial-gradient(120% 55% at 50% 0%, rgba(214,33,127,.30) 0%, rgba(214,33,127,0) 60%),
+      linear-gradient(160deg,#4a1052 0%,#7a2c8f 55%,#b3186a 100%);
+    background-repeat:no-repeat;
+    background-attachment:fixed;
+    color:var(--branco);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Arial,sans-serif;
+    min-height:100svh;
+    display:flex;justify-content:center;
+    padding:30px 20px calc(30px + env(safe-area-inset-bottom));
+  }
+  .wrap{width:100%;max-width:420px;display:flex;flex-direction:column;align-items:center}
+
+  /* height:auto não é opcional: o <img> declara width/height (evita layout shift),
+     e sem isso o atributo height vira altura fixa e a logo sai esticada. */
+  .logo{width:100%;max-width:260px;height:auto;display:block;margin:0 0 14px;
+        filter:drop-shadow(0 6px 18px rgba(0,0,0,.35))}
+
+  .sub{font-size:14.5px;line-height:1.5;color:var(--cinza);text-align:center;margin:0 0 4px}
+  .sub b{color:var(--branco);font-weight:700}
+  .local{font-size:12.5px;color:var(--cinza);text-align:center;margin:0 0 24px;opacity:.85}
+
+  .btn{
+    width:100%;display:flex;align-items:center;gap:14px;
+    background:var(--branco);color:var(--ink);text-decoration:none;
+    border-radius:15px;padding:16px 18px;margin-bottom:12px;
+    font-size:15.5px;font-weight:700;letter-spacing:.1px;
+    border:1px solid transparent;
+    transition:transform .12s ease, box-shadow .12s ease;
+    box-shadow:0 2px 10px rgba(26,4,30,.22);
+  }
+  .btn:active{transform:scale(.985)}
+  @media (hover:hover){ .btn:hover{transform:translateY(-1px);box-shadow:0 8px 22px rgba(26,4,30,.38)} }
+  .btn.destaque{border-left:5px solid var(--magenta);padding-left:14px}
+
+  .ico{width:26px;height:26px;flex:0 0 26px;display:grid;place-items:center}
+  .ico svg{width:100%;height:100%;display:block}
+  .txt{display:flex;flex-direction:column;line-height:1.25}
+  .txt small{font-size:11.5px;font-weight:500;color:var(--ink-soft);margin-top:2px}
+  .seta{margin-left:auto;color:#b9a8bf;font-size:18px;line-height:1}
+
+  .rodape{margin-top:12px;display:flex;flex-direction:column;align-items:center;gap:9px}
+  .risco{width:52px;height:3px;background:var(--amarelo);border-radius:3px;margin:16px 0 2px;opacity:.9}
+  .ig{display:inline-flex;align-items:center;gap:8px;color:var(--cinza);text-decoration:none;font-size:13.5px;font-weight:600}
+  .ig svg{width:19px;height:19px}
+  .end{font-size:11.5px;color:var(--cinza);text-align:center;line-height:1.6;margin:4px 0 0;opacity:.8}
+</style>
+</head>
+<body>
+  <main class="wrap">
+    <img class="logo" src="logo.webp" alt="Açaí Mais Sabor" width="640" height="399" />
+
+    <p class="sub"><b>O Açaí oficial de Votuporanga</b></p>
+    <p class="local">Todos os dias · das 14:50 às 22:30</p>
+
+    <!-- CARDÁPIO (principal). Aqui o pedido NASCE e FECHA: é o destino que fatura.
+         Leva UTM porque o destino é nosso e lê a origem (attribution.js), e leva o
+         fbclid porque sem ele o Purchase do CAPI sai sem fbc. Mesma aba de propósito:
+         é navegação no próprio domínio, o localStorage e os cookies seguem junto. -->
+    <a class="btn destaque" id="btCardapio" data-bt="cardapio"
+       href="/?utm_source=instagram&amp;utm_medium=bio&amp;utm_campaign=link_bio&amp;utm_content=bio_cardapio">
+      <span class="ico" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path fill="#d6217f" d="M12 3c-4.42 0-8 2.69-8 6 0 1.3.55 2.5 1.5 3.47V19a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2v-6.53C19.45 11.5 20 10.3 20 9c0-3.31-3.58-6-8-6zm0 2c3.31 0 6 1.79 6 4s-2.69 4-6 4-6-1.79-6-4 2.69-4 6-4zm-4.5 9.3c1.3.63 2.84.99 4.5.99s3.2-.36 4.5-.99V19h-9v-4.7z"/></svg>
+      </span>
+      <span class="txt">Fazer meu pedido<small>Monte seu açaí e peça pelo cardápio</small></span>
+      <span class="seta">›</span>
+    </a>
+
+    <!-- WHATSAPP via link rastreável do Tintim. Os parâmetros que a gente anexa aqui
+         entram na MENSAGEM que chega no WhatsApp (o Tintim codifica a origem em
+         caracteres invisíveis). Verificado em 23/09/2026: o destino do Tintim muda
+         de hash conforme a UTM enviada, então a origem realmente viaja junto. -->
+    <a class="btn" id="btWhats" data-bt="whatsapp" target="_blank" rel="noopener"
+       href="https://tintim.link/whatsapp/aa2ca1e8-22e0-48dc-86bc-2f918f592a21/ef20cc3a-52e6-4981-8d64-08621292d795?utm_source=instagram&amp;utm_medium=bio&amp;utm_campaign=link_bio&amp;utm_content=bio_whatsapp">
+      <span class="ico" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path fill="#25D366" d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 0 0 4.79 1.22h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.38c0-4.54 3.7-8.23 8.25-8.23 2.2 0 4.27.86 5.83 2.42a8.19 8.19 0 0 1 2.41 5.82c0 4.54-3.7 8.23-8.24 8.23zm4.52-6.16c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.24-.64.8-.79.97-.14.16-.29.18-.54.06-.25-.13-1.05-.39-1.99-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.5.11-.11.25-.29.37-.43.13-.15.17-.25.25-.41.08-.17.04-.31-.02-.43-.06-.12-.56-1.34-.76-1.84-.2-.48-.41-.42-.56-.43h-.48c-.16 0-.43.06-.65.31-.22.25-.86.84-.86 2.05s.88 2.38 1 2.54c.12.17 1.73 2.64 4.19 3.7.59.25 1.04.4 1.4.52.59.19 1.12.16 1.54.1.47-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.06-.11-.22-.17-.47-.29z"/></svg>
+      </span>
+      <span class="txt">Chamar no WhatsApp<small>Tire dúvidas e peça pela conversa</small></span>
+      <span class="seta">›</span>
+    </a>
+
+    <!-- GOOGLE. Sem UTM: o Google não lê a nossa origem do outro lado. -->
+    <a class="btn" id="btGoogle" data-bt="google" target="_blank" rel="noopener"
+       href="https://g.page/r/CV2ZrfNuzu6fEBM/review">
+      <span class="ico" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M21.6 12.23c0-.71-.06-1.4-.18-2.05H12v3.88h5.38a4.6 4.6 0 0 1-2 3.02v2.5h3.24c1.89-1.74 2.98-4.3 2.98-7.35z"/><path fill="#34A853" d="M12 22c2.7 0 4.96-.9 6.62-2.42l-3.24-2.5c-.9.6-2.04.96-3.38.96-2.6 0-4.8-1.76-5.59-4.12H3.06v2.59A10 10 0 0 0 12 22z"/><path fill="#FBBC05" d="M6.41 13.92a6 6 0 0 1 0-3.84V7.49H3.06a10 10 0 0 0 0 9.02l3.35-2.59z"/><path fill="#EA4335" d="M12 5.98c1.47 0 2.79.5 3.83 1.5l2.87-2.87C16.95 2.99 14.7 2 12 2a10 10 0 0 0-8.94 5.49l3.35 2.59C7.2 7.72 9.4 5.98 12 5.98z"/></svg>
+      </span>
+      <span class="txt">Avaliar no Google<small>Sua opinião ajuda muito a loja</small></span>
+      <span class="seta">›</span>
+    </a>
+
+    <div class="rodape">
+      <div class="risco"></div>
+      <a class="ig" id="btIg" data-bt="instagram" target="_blank" rel="noopener"
+         href="https://www.instagram.com/acai_mais_saborvotuporanga/">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#c9b6cf" stroke-width="1.8">
+          <rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="3.6"/><circle cx="17.2" cy="6.8" r="1.1" fill="#c9b6cf" stroke="none"/>
+        </svg>
+        @acai_mais_saborvotuporanga
+      </a>
+      <p class="end">R. Pernambuco, 3507 · Votuporanga/SP</p>
+    </div>
+  </main>
+
+<script>
+/* ===========================================================================
+   1) REPASSE DE ORIGEM.  É o coração desta página.
+
+   O que o Instagram entrega na URL da bio (medido no print de 23/09/2026):
+       ?utm_source=ig&utm_medium=social&utm_content=link_in_bio&fbclid=PAcGRvZgJ...
+
+   O que sai daqui para o cardápio e para o WhatsApp:
+   - utm_source=instagram e utm_medium=bio  -> FIXOS. É a convenção JÁ USADA neste
+     cliente (o /pedidos carimba isso desde sempre). Não trocar para "link_bio":
+     o histórico do dashboard e as consultas do CRM leem "bio".
+     O "ig/social" que o Instagram põe sozinho é ignorado de propósito.
+   - utm_campaign=link_bio -> padrão, mas o que vier na URL SUBSTITUI. Assim dá para
+     criar link de campanha própria: /ig?utm_campaign=story_combinado
+   - utm_content=bio_cardapio | bio_whatsapp -> qual BOTÃO foi clicado.
+   - fbclid e gclid -> repassados. Este é o furo que a página fecha: o /pedidos
+     antigo é um 302! do Netlify, que descarta a query inteira. Medido em
+     23/09/2026: /pedidos?...&fbclid=TESTE123 -> Location sem o fbclid.
+     Sem fbclid o cardápio não escreve _fbc e o Purchase sai sem fbc (13,5% de
+     cobertura, medido em 06/09/2026).
+   =========================================================================== */
+(function () {
+  var p = new URLSearchParams(location.search);
+  var campanha = p.get('utm_campaign');
+  var ids = {};
+  ['fbclid', 'gclid'].forEach(function (k) { var v = p.get(k); if (v) ids[k] = v; });
+
+  document.querySelectorAll('a[data-bt]').forEach(function (a) {
+    var bt = a.getAttribute('data-bt');
+    // Google e Instagram não leem a nossa origem: não sujar o link.
+    if (bt === 'google' || bt === 'instagram') return;
+    try {
+      var u = new URL(a.href, location.origin);
+      if (campanha) u.searchParams.set('utm_campaign', campanha);
+      Object.keys(ids).forEach(function (k) { u.searchParams.set(k, ids[k]); });
+      a.href = u.toString();
+    } catch (e) {}
+  });
+})();
+
+/* ===========================================================================
+   2) external_id ESTÁVEL, compartilhado com o cardápio.
+
+   O cardápio guarda um id anônimo em localStorage('ams_uid') e manda em todo
+   evento (tracking.js:33). Como esta página está no MESMO domínio, ela escreve
+   a MESMA chave: o clique na bio e a compra de depois chegam no Meta com o
+   mesmo external_id, e a jornada costura. Numa bio em domínio separado isso
+   seria impossível.
+   =========================================================================== */
+function externalId() {
+  try {
+    var v = localStorage.getItem('ams_uid');
+    if (!v) {
+      v = (window.crypto && crypto.randomUUID) ? crypto.randomUUID()
+        : Date.now() + '-' + Math.random().toString(36).slice(2);
+      localStorage.setItem('ams_uid', v);
+    }
+    return v;
+  } catch (e) { return undefined; }
+}
+
+/* ===========================================================================
+   3) ClicouBio: um evento por clique, navegador + servidor com o MESMO event_id.
+
+   O servidor vai pela Function /capi que já existe (mesma trava de origem, o
+   pixel e o token lidos do banco, e o registro em capi_log). Purchase não passa
+   por esse caminho, então não há como forjar venda por aqui.
+   keepalive: o request sobrevive à navegação, que acontece no mesmo instante.
+   =========================================================================== */
+(function () {
+  function cookie(n) {
+    try { return (document.cookie.match('(^|;)\\s*' + n + '\\s*=\\s*([^;]+)') || [])[2] || null; }
+    catch (e) { return null; }
+  }
+  var uid = externalId();
+
+  document.querySelectorAll('a[data-bt]').forEach(function (el) {
+    el.addEventListener('click', function () {
+      var bt = el.getAttribute('data-bt');
+      var eid = 'bio_' + bt + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+
+      try { fbq('trackCustom', 'ClicouBio', { content_name: bt, source: 'instagram_bio' }, { eventID: eid }); } catch (e) {}
+
+      try {
+        fetch('/.netlify/functions/capi', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          keepalive: true,
+          body: JSON.stringify({
+            store: 'acai-mais-sabor',
+            event_name: 'clicou_bio',
+            event_id: eid,
+            content_name: bt,
+            external_id: uid,
+            event_source_url: location.href,
+            fbp: cookie('_fbp') || undefined,
+            fbc: cookie('_fbc') || undefined,
+            fbclid: new URLSearchParams(location.search).get('fbclid') || undefined
+          })
+        }).catch(function () {});
+      } catch (e) {}
+    });
+  });
+})();
+</script>
+</body>
+</html>

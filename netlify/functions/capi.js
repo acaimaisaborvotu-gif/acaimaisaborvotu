@@ -107,7 +107,11 @@ function montarEvento(o, b, ipAddr, uaStr) {
 
 // GA4 -> Meta. Purchase FORA de propósito: compra só entra pelo caminho autoritativo
 // (order_id -> valor lido do banco). Assim ninguém forja/infla venda pelo modo genérico.
-const EVENTOS_META = { page_view: 'PageView', view_item: 'ViewContent', add_to_cart: 'AddToCart', begin_checkout: 'InitiateCheckout', add_payment_info: 'AddPaymentInfo', search: 'Search', generate_lead: 'Lead' };
+const EVENTOS_META = { page_view: 'PageView', view_item: 'ViewContent', add_to_cart: 'AddToCart', begin_checkout: 'InitiateCheckout', add_payment_info: 'AddPaymentInfo', search: 'Search', generate_lead: 'Lead',
+  // Clique no link da bio (/ig). Evento personalizado, de TOPO: é sinal de interesse,
+  // não é lead nem venda. Entra por aqui de propósito, para herdar as três travas
+  // (origem na allowlist, evento no mapa, Purchase fora) e o registro em capi_log.
+  clicou_bio: 'ClicouBio' };
 
 // Evento do funil (meio/topo) espelhado do navegador. O event_id é o MESMO do Pixel
 // (DL - event_id) -> o Meta deduplica. Não tem dado sensível de dinheiro aqui.
@@ -202,7 +206,7 @@ exports.handler = async function (event) {
     const ev = montarEventoGenerico(b, ip(event), ua(event));
     if (!ev) return json(200, { ok: true, skipped: 'evento nao mapeado (ou purchase pelo caminho errado)' });
     const rg = await enviar(cfg, token, ev);
-    await logar(store, null, ev, rg, 'site');
+    await logar(store, null, ev, rg, b.event_name === 'clicou_bio' ? 'bio' : 'site');
     return rg.status >= 200 && rg.status < 300 ? json(200, { ok: true, meta_status: rg.status }) : json(502, { ok: false, meta_status: rg.status, meta: rg.body });
   }
 
