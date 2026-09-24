@@ -11,7 +11,31 @@
        ============================================================ -->
   <script>
     // Destino final (link rastreavel do Tintim) e funcao unica de redirect.
-    var DESTINO = "https://tintim.link/whatsapp/aa2ca1e8-22e0-48dc-86bc-2f918f592a21/ef20cc3a-52e6-4981-8d64-08621292d795";
+    // ORIGEM CARIMBADA NO DESTINO (23/09/2026). Antes esta URL ia pelada, e toda conversa
+    // que nascia aqui chegava no Tintim sem origem. O Tintim reescreve a mensagem do
+    // WhatsApp conforme os parametros que recebe (verificado: utm diferente = destino
+    // diferente), entao e assim que a origem viaja para DENTRO da conversa.
+    //
+    // utm_source e utm_medium sao FIXOS (instagram / bio), a convencao deste cliente.
+    // O "ig/social" que o Instagram acrescenta sozinho e ignorado de proposito.
+    // utm_content=bio_whatsapp_direto separa quem veio por ESTE link de quem veio pelo
+    // botao de WhatsApp da pagina /ig (que usa bio_whatsapp).
+    var BASE = "https://tintim.link/whatsapp/aa2ca1e8-22e0-48dc-86bc-2f918f592a21/ef20cc3a-52e6-4981-8d64-08621292d795";
+    var DESTINO = (function () {
+      try {
+        var p = new URLSearchParams(location.search);
+        var u = new URL(BASE);
+        u.searchParams.set("utm_source", "instagram");
+        u.searchParams.set("utm_medium", "bio");
+        u.searchParams.set("utm_campaign", p.get("utm_campaign") || "link_bio");
+        u.searchParams.set("utm_content", "bio_whatsapp_direto");
+        ["fbclid", "gclid"].forEach(function (k) {
+          var v = p.get(k);
+          if (v) u.searchParams.set(k, v);
+        });
+        return u.toString();
+      } catch (e) { return BASE; }   // navegador velho: pelo menos abre o WhatsApp
+    })();
     var jaFoi = false;
     function irPraWhatsApp() {
       if (jaFoi) return;
@@ -46,7 +70,8 @@
   </noscript>
   <!-- ============================================================ -->
 
-  <!-- Redirect de seguranca via meta refresh (so para quem esta sem JS) -->
+  <!-- Redirect de seguranca via meta refresh (so para quem esta sem JS).
+       Vai sem utm mesmo: sem JavaScript nao ha como montar a URL. E o caso raro. -->
   <meta http-equiv="refresh" content="2; url=https://tintim.link/whatsapp/aa2ca1e8-22e0-48dc-86bc-2f918f592a21/ef20cc3a-52e6-4981-8d64-08621292d795">
 
   <!-- O redirect principal e os eventos ficam no script do Pixel, acima. -->

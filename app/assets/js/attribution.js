@@ -75,11 +75,25 @@ export function captureAttribution() {
     // Jornada: só toques com origem CLARA entram (direto é volta, não é toque novo).
     // Não repete o mesmo toque seguido; guarda no máximo os últimos PATH_MAX.
     if (now) {
-      const t = { source: stamp.source, medium: stamp.medium || null, campaign: stamp.campaign || null, content: stamp.content || null, ts: stamp.ts, landing: stamp.landing };
+      // O click id VIAJA JUNTO no toque. Sem isto ele ficava só no KEY_LAST, e como
+      // getAttribution() devolve o último toque do PATH quando existe jornada, o
+      // fbclid morria antes de chegar no pedido: 0 de 692 pedidos em 30 dias tinham
+      // click id (medido em 23/09/2026). Com ele, orders.atribuicao prova a origem de
+      // anúncio pelo id do clique, e o CAPI tem de onde tirar o fbc quando o cookie
+      // _fbc falta (montarEvento já lê atrib.last.fbclid).
+      const t = { source: stamp.source, medium: stamp.medium || null, campaign: stamp.campaign || null, content: stamp.content || null, ts: stamp.ts, landing: stamp.landing, fbclid: stamp.fbclid || null, gclid: stamp.gclid || null };
       let path = readJson(KEY_PATH); if (!Array.isArray(path)) path = [];
       const prev = path[path.length - 1];
       const igual = prev && prev.source === t.source && prev.medium === t.medium && prev.campaign === t.campaign && prev.content === t.content;
       if (!igual) { path.push(t); if (path.length > PATH_MAX) path = path.slice(-PATH_MAX); localStorage.setItem(KEY_PATH, JSON.stringify(path)); }
+      // Mesmo toque de novo, mas agora COM click id (voltou pelo anúncio depois de ter
+      // entrado sem): preenche o que faltava em vez de descartar. Nunca sobrescreve um
+      // click id que já existe, pra não trocar o clique que ganhou o crédito.
+      else if ((t.fbclid && !prev.fbclid) || (t.gclid && !prev.gclid)) {
+        if (t.fbclid && !prev.fbclid) prev.fbclid = t.fbclid;
+        if (t.gclid && !prev.gclid) prev.gclid = t.gclid;
+        localStorage.setItem(KEY_PATH, JSON.stringify(path));
+      }
     }
   } catch (e) {}
 }
