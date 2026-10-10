@@ -4,7 +4,7 @@
 
 import { el, money, toast, maskPhone, phoneValido, imgUrl } from './util.js';
 import * as cart from './cart.js';
-import { getStore, getSettings, isOpenNow, nextOpenLabel, buildCatalog, hydrate, secao2, upsellItems, menorMl, orderStatus, customerLogin, customerOrders } from './data.js';
+import { getStore, getSettings, isOpenNow, nextOpenLabel, buildCatalog, hydrate, secao2, novidades, upsellItems, menorMl, orderStatus, customerLogin, customerOrders, precosVersao } from './data.js';
 import { openProduct } from './product-modal.js';
 import { openCheckout } from './checkout.js';
 import { track } from './tracking.js';
@@ -33,7 +33,7 @@ let settings = getSettings();
 let catalog = buildCatalog();
 let query = '';
 
-const root = el('div');
+const root = el('div', { style: 'position:relative' }); // a barra de conta/sacola fica por cima do banner
 document.body.append(root);
 
 function statusPill() {
@@ -69,9 +69,33 @@ function hero() {
   const aberto = isOpenNow(settings);
   return el('div', { class: 'hero' }, el('div', { class: 'container inner' }, [
     el('img', { class: 'hero-logo', src: 'assets/img/logo.png', alt: 'Açaí Mais Sabor' }),
-    el('h1', { class: 'hero-h1', text: 'O Açaí oficial de Votuporanga' }),
-    el('p', { class: 'hero-sub', text: 'Feito com propósito, entregue com carinho e tem o Sabor que fala por si!' }),
+    el('h1', { class: 'hero-h1', html: 'O Açaí oficial<br>de <em>Votuporanga</em>' }),
     el('div', { class: 'hero-status' }, el('span', { class: 'pill ' + (aberto ? 'pill-ok' : 'pill-closed') }, [el('span', { class: 'dot' }), aberto ? 'Aberto agora' : (nextOpenLabel(settings) ? `Fechado, abre ${nextOpenLabel(settings)}` : 'Fechado no momento')])),
+  ]));
+}
+
+// Rodapé: endereço, horário (lido do PAINEL, nunca escrito à mão: o da loja impressa
+// ficou desatualizado assim), WhatsApp e Instagram.
+const fmtHora = (h) => { const [hh, mm] = String(h || '').split(':'); return hh ? (mm && mm !== '00' ? `${+hh}h${mm}` : `${+hh}h`) : ''; };
+function horarioTexto() {
+  const hs = settings.horarios || {};
+  const dias = [0, 1, 2, 3, 4, 5, 6].map((d) => hs[d]).filter((h) => h && h.abre && h.fecha);
+  if (!dias.length) return '';
+  const igual = dias.length === 7 && dias.every((h) => h.abre === dias[0].abre && h.fecha === dias[0].fecha);
+  if (igual) return `Todos os dias, das ${fmtHora(dias[0].abre)} às ${fmtHora(dias[0].fecha)}`;
+  const hoje = hs[new Date().getDay()];
+  return hoje && hoje.abre ? `Hoje, das ${fmtHora(hoje.abre)} às ${fmtHora(hoje.fecha)}` : '';
+}
+function rodape() {
+  const tel = String(store.whatsapp || '').replace(/\D/g, '').replace(/^55/, '');
+  const telFmt = tel.length === 11 ? `(${tel.slice(0, 2)}) ${tel.slice(2, 7)}-${tel.slice(7)}` : tel;
+  const hr = horarioTexto();
+  return el('footer', { class: 'rodape' }, el('div', { class: 'container' }, [
+    el('img', { src: 'assets/img/logo.png', alt: 'Açaí Mais Sabor', loading: 'lazy' }),
+    el('p', { html: `Rua Pernambuco, 3507 · Patrimônio Velho · Votuporanga/SP${hr ? '<br>' + hr : ''}<br>` +
+      (telFmt ? `<a href="https://wa.me/55${tel}" target="_blank" rel="noopener">${telFmt}</a> · ` : '') +
+      '<a href="https://www.instagram.com/acai_mais_saborvotuporanga/" target="_blank" rel="noopener">@acai_mais_saborvotuporanga</a>' }),
+    el('p', { class: 'fn', text: 'Imagens ilustrativas. Preços sujeitos a alteração.' }),
   ]));
 }
 
@@ -107,16 +131,22 @@ function catNav() {
 }
 
 function thumb(item, big) {
-  if (item.foto) return el('img', {
-    class: big ? 'ph' : 'thumb', src: imgUrl(item.foto, big ? 640 : 400, big ? 74 : 72),
+  const foto = item.fotoCard || item.foto;   // card: padronizada; o modal usa item.foto (original)
+  if (foto) return el('img', {
+    class: big ? 'ph' : 'thumb', src: imgUrl(foto, big ? 640 : 400, big ? 74 : 72),
     alt: item.nome, loading: 'lazy', decoding: 'async',
     onerror: function () {
       if (this.dataset.orig) this.replaceWith(el('div', { class: (big ? 'ph' : 'thumb') + ' ph' }, el('span', { text: item.emoji })));
-      else { this.dataset.orig = '1'; this.src = item.foto; }  // transformação falhou -> tenta o original
+      else { this.dataset.orig = '1'; this.src = foto; }  // transformação falhou -> tenta o arquivo sem transformar
     },
   });
   return el('div', { class: (big ? 'ph' : 'thumb') + ' ph' }, el('span', { text: item.emoji }));
 }
+
+// Etiquetas dos combinados (as mesmas cores da loja). Ordem = ordem dos filtros.
+const TAGS = { maispedido: ['Mais pedido', 't-mp'], novidade: ['Novidade', 't-nv'], chocolate: ['Ama chocolate', 't-ch'],
+  morango: ['Ama morango', 't-mo'], banana: ['Ama banana', 't-ba'], crianca: ['Criança', 't-cr'], fitness: ['Fitness', 't-ft'], indicado: ['Indicado', 't-in'] };
+const FILTRAVEIS = ['chocolate', 'morango', 'banana', 'crianca', 'fitness', 'indicado'];
 
 function card(item) {
   const c = el('div', { class: 'card' + (item.esgotado ? ' out' : '') }, [
@@ -133,15 +163,17 @@ function card(item) {
       ]),
     ]),
     item.esgotado ? el('span', { class: 'out-tag', text: 'Esgotado' }) : null,
+    item.tag && TAGS[item.tag] ? el('span', { class: 'ctag ' + TAGS[item.tag][1], text: TAGS[item.tag][0] }) : null,
   ]);
+  if (item.tag) c.dataset.tag = item.tag;
   if (!item.esgotado) c.addEventListener('click', () => open(item));
   return c;
 }
 
 function monteCard(item) {
   const c = el('div', { class: 'card', style: 'background:var(--grad-acai);color:#fff;border:none' }, [
-    item.foto
-      ? el('img', { class: 'thumb', src: imgUrl(item.foto, 400, 72), alt: item.nome, loading: 'lazy', decoding: 'async', onerror: function () { if (this.dataset.orig) this.replaceWith(el('div', { class: 'thumb ph', style: 'background:rgba(255,255,255,.15)' }, el('span', { text: '🍨' }))); else { this.dataset.orig = '1'; this.src = item.foto; } } })
+    (item.fotoCard || item.foto)
+      ? el('img', { class: 'thumb', src: imgUrl(item.fotoCard || item.foto, 400, 72), alt: item.nome, loading: 'lazy', decoding: 'async', onerror: function () { if (this.dataset.orig) this.replaceWith(el('div', { class: 'thumb ph', style: 'background:rgba(255,255,255,.15)' }, el('span', { text: '🍨' }))); else { this.dataset.orig = '1'; this.src = item.fotoCard || item.foto; } } })
       : el('div', { class: 'thumb ph', style: 'background:rgba(255,255,255,.15)' }, el('span', { text: '🍨' })),
     el('div', { class: 'body' }, [
       el('h3', { style: 'color:#fff', text: item.nome }),
@@ -156,11 +188,53 @@ function monteCard(item) {
   return c;
 }
 
-function featured(items) {
+// ACENO: o carrossel desliza um pouco e volta, mostrando que tem mais pro lado.
+// Mesmo código do cardápio da loja: anima quadro a quadro (não depende de scroll suave),
+// desliga o encaixe durante o movimento, repete 3 vezes e para; qualquer toque cancela.
+// Só começa quando o carrossel aparece na tela, e respeita quem desligou animações.
+const semMovimento = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+const suave = (t) => (t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+function acenar(el) {
+  if (semMovimento || !('IntersectionObserver' in window)) return;
+  const ATE = 52, IDA = 420, ESPERA = 240, VOLTA = 460, PAUSA = 3000, MAX = 3;
+  let vezes = 0, parado = false, timer = null, quadro = null;
+  const soltarSnap = () => { el.style.scrollSnapType = ''; };
+  const cancelar = () => {
+    parado = true;
+    if (timer) clearTimeout(timer);
+    if (quadro) { cancelAnimationFrame(quadro); quadro = null; if (el.scrollLeft > 0 && el.scrollLeft <= ATE + 4) el.scrollLeft = 0; }
+    soltarSnap();
+  };
+  ['pointerdown', 'touchstart', 'wheel'].forEach((e) => el.addEventListener(e, cancelar, { passive: true, once: true }));
+  const uma = () => {
+    if (parado || vezes >= MAX || !el.isConnected || el.scrollWidth <= el.clientWidth + 8) return cancelar();
+    vezes++;
+    el.style.scrollSnapType = 'none';
+    const t0 = performance.now(), fim = IDA + ESPERA + VOLTA;
+    const passo = (agora) => {
+      if (parado) return;
+      const t = agora - t0;
+      const x = t < IDA ? ATE * suave(t / IDA) : t < IDA + ESPERA ? ATE : ATE * (1 - suave(Math.min((t - IDA - ESPERA) / VOLTA, 1)));
+      el.scrollLeft = Math.round(x);
+      if (t < fim) quadro = requestAnimationFrame(passo);
+      else { el.scrollLeft = 0; quadro = null; soltarSnap(); timer = setTimeout(uma, PAUSA); }
+    };
+    quadro = requestAnimationFrame(passo);
+  };
+  const io = new IntersectionObserver((ents) => {
+    if (ents.some((e) => e.isIntersecting && e.intersectionRatio >= .5)) { io.disconnect(); timer = setTimeout(uma, 700); }
+  }, { threshold: [.5] });
+  io.observe(el);
+}
+
+function featured(items, selo, seloCls = 't-nv') {
   const track = el('div', { class: 'featured' });
-  items.forEach((item) => {
+  items.forEach((item, i) => {
     const f = el('div', { class: 'fcard' }, [
       thumb(item, true),
+      // o selo vem DEPOIS da foto: no Safari do iPhone, a foto carregada sob demanda era
+      // pintada por cima do selo quando ele vinha antes (na lista, que já era depois, não sumia)
+      selo ? el('span', { class: 'fselo ' + seloCls, text: typeof selo === 'function' ? selo(i) : selo }) : null,
       el('div', { class: 'fbody' }, [
         el('h3', { text: item.nome }),
         item.precoDe
@@ -172,7 +246,14 @@ function featured(items) {
     f.addEventListener('click', () => open(item));
     track.append(f);
   });
-  return track;
+  // seta pra quem usa mouse (no celular o card cortado na borda já mostra que tem mais)
+  const arrow = el('button', { class: 'feat-arrow', type: 'button', 'aria-label': 'Ver mais', html: '&#8250;' });
+  arrow.addEventListener('click', () => track.scrollBy({ left: Math.max(200, track.clientWidth * 0.8), behavior: 'smooth' }));
+  const sync = () => { const fim = track.scrollLeft + track.clientWidth >= track.scrollWidth - 8; arrow.style.display = fim ? 'none' : ''; };
+  track.addEventListener('scroll', sync, { passive: true });
+  requestAnimationFrame(sync);
+  acenar(track);
+  return el('div', { class: 'feat-wrap' }, [track, arrow]);
 }
 
 const EMOJI_CAT = { combinados: '🍧', monte: '🍨', frapes: '🥤', saladas: '🥣', milkshakes: '🥤', sobremesas: '🍫', bebidas: '🧃' };
@@ -193,6 +274,15 @@ function categoriasTiles() {
   return el('section', { class: 'section' }, el('div', { class: 'container' }, [el('h2', { text: 'Categorias' }), wrap]));
 }
 
+// Novidades (combinados marcados como NOVO no painel), logo abaixo do TOP 5
+function novidadesSection() {
+  const items = novidades();
+  if (!items.length) return null;
+  const sec = el('section', { class: 'section', id: 'sec-novidades' });
+  sec.append(el('div', { class: 'container' }, el('h2', { text: 'Novidades' })), featured(items, 'NOVIDADE', 't-nv'));
+  return sec;
+}
+
 // Seção 2 personalizável (ex: Promoção), abaixo do TOP 5
 function secao2Section() {
   const s = secao2();
@@ -200,6 +290,62 @@ function secao2Section() {
   const sec = el('section', { class: 'section' });
   sec.append(el('div', { class: 'container' }, el('h2', { text: s.titulo })), featured(s.items));
   return sec;
+}
+
+// Combinados: "N combinações prontas" + filtros por categoria, como na loja.
+// O filtro só esconde/mostra cards: não muda o que vai pra sacola nem o preço.
+function combinadosFiltrados(lista) {
+  // Igual à loja: quem já aparece no TOP 5 ou em Novidades não repete na lista.
+  // Só ESCONDE da lista: o catálogo segue com todos (busca e upsell acham por id).
+  const items = lista.filter((i) => i.tag !== 'maispedido' && i.tag !== 'novidade');
+  const grid = el('div', { class: 'grid' }, items.map(card));
+  const cats = FILTRAVEIS.filter((k) => items.some((i) => i.tag === k));
+  const txt = el('p', { class: 'sec-sub', text: `${items.length} combinações prontas. Escolha o tamanho ao pedir.` });
+  if (!cats.length) return [txt, grid];
+  const bar = el('div', { class: 'filtros' });
+  const aplica = (k, btn) => {
+    bar.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b === btn));
+    grid.querySelectorAll('.card').forEach((cd) => { cd.style.display = !k || cd.dataset.tag === k ? '' : 'none'; });
+  };
+  const todos = el('button', { class: 'on', type: 'button', text: 'Todos' });
+  todos.addEventListener('click', () => aplica('', todos));
+  bar.append(todos);
+  cats.forEach((k) => {
+    const b = el('button', { type: 'button', text: `${TAGS[k][0]} (${items.filter((i) => i.tag === k).length})` });
+    b.addEventListener('click', () => aplica(k, b));
+    bar.append(b);
+  });
+  return [txt, bar, grid];
+}
+
+// Milk-shake com tudo à vista, como na loja: tamanhos com preço e sabores. É só VITRINE:
+// tocar abre o mesmo modal de sempre, que é quem monta o pedido, o preço do sabor extra
+// e o texto da impressão. Nada do caminho do pedido muda.
+function milkshakeBox(item) {
+  const ms = item.raw || {};
+  const extra = ms.precoSaborExtra ?? 5;
+  const tams = [...(ms.tamanhos || [])].sort((a, b) => a.ml - b.ml);
+  const sabores = (ms.sabores || []).map((s) => s.nome || s).filter(Boolean);
+  const box = el('div', { class: 'mk-box', role: 'button', tabindex: '0' }, [
+    el('div', { class: 'mk-head' }, [
+      (item.fotoCard || item.foto) ? el('img', { src: imgUrl(item.fotoCard || item.foto, 240, 74), alt: item.nome, loading: 'lazy', decoding: 'async' }) : null,
+      el('div', {}, [el('h3', { text: item.nome || 'Milk-shake' }), el('p', { text: 'Escolha o tamanho e o sabor.' })]),
+    ]),
+    el('div', { class: 'passo' }, [
+      el('b', {}, [el('span', { class: 'n', text: '1' }), 'Escolha o tamanho']),
+      el('div', { class: 'mk-tams' }, tams.map((t) => el('div', {}, [el('b', { text: `${t.ml}ml` }), el('span', { text: money(t.preco) })]))),
+    ]),
+    el('div', { class: 'passo' }, [
+      el('b', {}, [el('span', { class: 'n', text: '2' }), 'Escolha o sabor']),
+      el('p', { class: 'mk-hint', text: `1 sabor já vem incluso no preço. Cada sabor a mais: + ${money(extra)}` }),
+      el('div', { class: 'mk-sabores' }, sabores.map((s) => el('span', { text: s }))),
+    ]),
+    el('div', { class: 'mk-cta', text: 'Montar meu milk-shake' }),
+  ]);
+  const abrir = () => open(item);
+  box.addEventListener('click', abrir);
+  box.addEventListener('keydown', (e) => { if (e.key === 'Enter') abrir(); });
+  return box;
 }
 
 let sectionsHost;
@@ -223,14 +369,20 @@ function renderSections() {
       // carrossel fica fora do container pra sangrar nas bordas
     } else if (c.tipo === 'monte') {
       inner.append(el('div', { class: 'grid', style: 'grid-template-columns:1fr' }, c.items.map(monteCard)));
+    } else if (c.id === 'combinados') {
+      inner.append(...combinadosFiltrados(c.items));
+    } else if (c.tipo === 'milkshake' && c.items.length === 1) {
+      inner.append(milkshakeBox(c.items[0]));
     } else {
       inner.append(el('div', { class: 'grid' }, c.items.map(card)));
     }
     const sec = el('section', { class: 'section', id: 'sec-' + c.id });
-    if (c.tipo === 'destaques') { sec.append(el('div', { class: 'container' }, el('h2', { text: c.nome })), featured(c.items)); }
+    if (c.tipo === 'destaques') { sec.append(el('div', { class: 'container' }, el('h2', { text: c.nome })), featured(c.items, (i) => `#${i + 1} mais pedido`, 't-mp')); }
     else sec.append(inner);
     sectionsHost.append(sec);
     if (c.tipo === 'destaques') {
+      const nv = novidadesSection();
+      if (nv) sectionsHost.append(nv);
       const s2 = secao2Section();
       if (s2) sectionsHost.append(s2);
       sectionsHost.append(categoriasTiles());
@@ -418,6 +570,8 @@ function trackerBar() {
 function repetirBanner() {
   if (pedido) return null; // já tem pedido em andamento -> mostra só o tracker
   let last; try { last = JSON.parse(localStorage.getItem('ams_ultimo_pedido') || 'null'); } catch (e) {}
+  // pedido salvo com preços de outra versão do cardápio não volta (preço velho ou item que saiu)
+  if (last && (last.v || null) !== (menuFresco ? precosVersao() : last.v || null)) return null;
   const items = (last && Array.isArray(last.items) ? last.items : []).filter((i) => i && i.precoUnit != null);
   if (!items.length) return null;
   const qtd = items.reduce((s, i) => s + (Number(i.qtd) || 1), 0);
@@ -596,16 +750,20 @@ function boot() {
   root.append(header(), hero());
   const tb = trackerBar(); if (tb) root.append(tb);
   const cb = closedBanner(); if (cb) root.append(cb);
-  const rb = repetirBanner(); if (rb) root.append(rb);
+  const rb = repetirBanner(); temRepetir = !!rb; if (rb) root.append(rb);
   root.append(searchBar(), catNav());
   const main = el('main', { id: 'sections', style: 'padding-bottom:90px' });
-  sectionsHost = main; root.append(main, cartBar());
+  sectionsHost = main; root.append(main, rodape(), cartBar());
   renderSections();
   updateCart();
   document.getElementById('loading')?.remove();
 }
 
 cart.onChange(updateCart);
+// Enquanto o cardápio vem do cache, o banner "Repetir" confia na versão salva; depois do
+// hydrate ele é re-julgado contra a versão real (por isso o boot de novo se ele existia).
+let menuFresco = false;
+let temRepetir = false;
 
 // Abre INSTANTÂNEO: mostra o cardápio do cache local (ou seed) na hora,
 // e atualiza por trás com o Supabase (sem segurar a tela nem manter conexão ao vivo).
@@ -613,11 +771,14 @@ settings = getSettings(); catalog = buildCatalog(); boot();
 // acompanhamento do pedido: busca o status agora e atualiza a cada 20s
 if (pedido) { refreshTracker(); setInterval(refreshTracker, 20000); }
 // assinatura inclui catálogo + promo + upsell + settings: re-renderiza se QUALQUER um mudou
-const fullSig = () => JSON.stringify({ c: catalog, s2: secao2(), up: upsellItems(), st: settings });
+const fullSig = () => JSON.stringify({ c: catalog, nv: novidades(), s2: secao2(), up: upsellItems(), st: settings });
 let lastSig = fullSig();
 hydrate().then(() => {
   settings = getSettings();
   catalog = buildCatalog();
+  // só com o cardápio FRESCO dá pra julgar versão: com o cache podia descartar à toa
+  menuFresco = true;
+  const limpou = cart.conferirVersao(precosVersao());
   const sig = fullSig();
-  if (sig !== lastSig) { const y = window.scrollY; boot(); window.scrollTo(0, y); lastSig = sig; }
+  if (sig !== lastSig || limpou || temRepetir) { const y = window.scrollY; boot(); window.scrollTo(0, y); lastSig = sig; }
 }).catch(() => {});

@@ -78,6 +78,8 @@ body.painel { background: #f4eef5; }
 .menu-item input.price { width: 86px; }
 .menu-item .star { font-size: 1.3rem; cursor: pointer; filter: grayscale(1); opacity: .4; }
 .menu-item .star.on { filter: none; opacity: 1; }
+.menu-item .nov { font-size: .62rem; font-weight: 800; letter-spacing: .04em; padding: 3px 7px; border-radius: 999px; cursor: pointer; border: 1px solid var(--line, #ddd); color: #999; flex: 0 0 auto; }
+.menu-item .nov.on { background: #7cb518; border-color: #7cb518; color: #1f3300; }
 .menu-item .mini { font-size: .72rem; padding: 5px 9px; }
 
 /* Login */

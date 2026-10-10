@@ -5,7 +5,7 @@
 
 import { el, money, toast, maskPhone, phoneCanon, phoneValido, ICON_WHATS } from './util.js';
 import * as cart from './cart.js';
-import { getStore, getSettings, isOpenNow, tempoEntrega, tempoRetirada, submitOrder, openOrdersCount, validarCupomServidor, captureLead, taxaBairro, sugestaoBairro } from './data.js';
+import { getStore, getSettings, isOpenNow, tempoEntrega, tempoRetirada, submitOrder, openOrdersCount, validarCupomServidor, captureLead, taxaBairro, sugestaoBairro, precosVersao } from './data.js';
 import { getAttribution, clearAttribution } from './attribution.js';
 import { track, capiPurchase } from './tracking.js';
 
@@ -283,7 +283,7 @@ export function openCheckout({ openOrders: ooInicial = 0 } = {}) {
         } catch (e) {}
       }
       // guarda os itens pra ele "repetir o último pedido" numa próxima visita
-      try { localStorage.setItem('ams_ultimo_pedido', JSON.stringify({ items: cart.getItems(), ts: Date.now() })); } catch (e) {}
+      try { localStorage.setItem('ams_ultimo_pedido', JSON.stringify({ items: cart.getItems(), ts: Date.now(), v: precosVersao() })); } catch (e) {}
       cart.clear();
       // Compra concluída: zera a jornada de atribuição pro PRÓXIMO pedido começar limpo.
       clearAttribution();

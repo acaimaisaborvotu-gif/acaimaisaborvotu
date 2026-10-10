@@ -30,3 +30,15 @@ export function setQty(u, qtd) {
 }
 export function remove(u) { items = items.filter((i) => i.uid !== u); save(); }
 export function clear() { items = []; save(); }
+
+// Carrinho salvo no aparelho com preços de outra versão do cardápio é descartado.
+// Chamar só com o cardápio FRESCO (depois do hydrate), nunca com o cache.
+// Primeira vez (sem versão salva) também descarta: é carrinho de antes desta trava.
+const VKEY = 'ams_cart_v';
+export function conferirVersao(v) {
+  if (!v) return false;
+  let salva = null; try { salva = localStorage.getItem(VKEY); } catch (e) {}
+  try { localStorage.setItem(VKEY, v); } catch (e) {}
+  if (salva !== v && items.length) { items = []; save(); return true; }
+  return false;
+}

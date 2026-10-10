@@ -27,6 +27,26 @@ const SEED_MENU = () => ({
 export function menu() { return MENU || SEED_MENU(); }
 export const RAW = { get RECIPIENTES() { return menu().RECIPIENTES; }, get BASES() { return menu().BASES; }, get ACOMPANHAMENTOS() { return menu().ACOMPANHAMENTOS; }, get FRAPE() { return menu().FRAPE; }, get MILKSHAKE() { return menu().MILKSHAKE; } };
 
+// "Impressão digital" dos PREÇOS e dos itens que existem no cardápio. Muda sozinha
+// quando qualquer preço muda ou algum item sai (pelo painel ou por atualização), e
+// NÃO muda quando a loja só marca esgotado. Serve pra descartar carrinho e "repetir
+// pedido" salvos no aparelho com preço velho: sem isso, depois de um reajuste o
+// cliente repetia o pedido pagando o valor antigo, ou pedia combinado que saiu.
+export function precosVersao(m = menu()) {
+  try {
+    const p = (a) => (a || []).map((x) => [x.id, x.preco, x.valorBase]);
+    const base = JSON.stringify([
+      (m.RECIPIENTES || []).map((r) => [r.id, p(r.tamanhos)]),
+      p(m.COMBOS),
+      (m.ACOMPANHAMENTOS || []).map((g) => [g.id, p(g.itens)]),
+      p(m.FRAPE && m.FRAPE.tamanhos), p(m.MILKSHAKE && m.MILKSHAKE.tamanhos), m.MILKSHAKE && m.MILKSHAKE.precoSaborExtra,
+      p(m.SALADAS), p(m.SOBREMESAS), p(m.BEBIDAS),
+    ]);
+    let h = 5381; for (let i = 0; i < base.length; i++) h = ((h * 33) ^ base.charCodeAt(i)) >>> 0;
+    return h.toString(36);
+  } catch (e) { return null; }
+}
+
 // Busca menu + settings do Supabase. Chame antes de renderizar o cardápio.
 export async function hydrate() {
   if (!hasSupabase()) return;
@@ -188,10 +208,18 @@ export function buildCatalog() {
         foto: fotos[c.id] || null, precoFrom: comboFrom(c), raw: c,
       }));
     } else if (cat.id === 'combinados') {
-      items = combosOrdenados.map((c) => ({
-        id: c.id, nome: c.nome, desc: c.desc, tipo: 'combo', catId: cat.id,
-        foto: fotos[c.id] || null, precoFrom: comboFrom(c), raw: c,
-      }));
+      // selo: TOP 5 e Novidades seguem a estrela e o botão NOVO do painel (nunca ficam
+      // desatualizados); o resto usa a categoria (menu.TAGS_COMBO), a mesma da loja.
+      const top = new Set(src.DESTAQUES || []), nov = new Set(src.NOVIDADES || []);
+      const tags = src.TAGS_COMBO || {};
+      items = combosOrdenados.map((c) => {
+        const t = tags[c.id];
+        const tag = top.has(c.id) ? 'maispedido' : nov.has(c.id) ? 'novidade' : (t && t !== 'maispedido' && t !== 'novidade' ? t : null);
+        return {
+          id: c.id, nome: c.nome, desc: c.desc, tipo: 'combo', catId: cat.id,
+          foto: fotos[c.id] || null, precoFrom: comboFrom(c), raw: c, tag,
+        };
+      });
     } else if (cat.id === 'monte') {
       items = [{
         id: 'monte', nome: 'Monte Seu Açaí', tipo: 'monte', catId: cat.id,
@@ -219,10 +247,26 @@ export function buildCatalog() {
     items.forEach((it) => { it.esgotado = out.has(it.id); it.emoji = EMOJI[cat.id] || '🍧'; });
     cats.push({ ...cat, nome: seedNomes[cat.id] || cat.nome, foto: catFotos[cat.id] || null, items });
   }
+  // FOTOS_CARD: versão padronizada (mesmo tamanho de produto, espaço pro selo) usada só
+  // nos cards. A foto original (FOTOS_SEED) continua sendo a do modal, onde aparece grande.
+  const fc = src.FOTOS_CARD || {};
+  cats.forEach((c) => c.items.forEach((i) => { if (i.id && fc[i.id]) i.fotoCard = fc[i.id]; }));
   return cats;
 }
 
 // Seção 2 personalizável (ex: Promoção): produtos do cardápio + ofertas personalizadas
+// Novidades: combinados marcados como NOVO no painel (menu.NOVIDADES). Combinado que
+// saiu do cardápio some sozinho da lista; esgotado continua aparecendo (igual ao TOP 5).
+export function novidades() {
+  const src = menu();
+  const fotos = src.FOTOS_SEED || {};
+  const byId = Object.fromEntries((src.COMBOS || []).map((c) => [c.id, c]));
+  return (src.NOVIDADES || []).map((id) => byId[id]).filter(Boolean).map((c) => ({
+    id: c.id, nome: c.nome, desc: c.desc, tipo: 'combo', catId: 'novidades',
+    foto: fotos[c.id] || null, fotoCard: (src.FOTOS_CARD || {})[c.id] || null, precoFrom: comboFrom(c), raw: c,
+  }));
+}
+
 export function secao2() {
   const s = menu().secao2;
   if (!s || !s.ativa) return null;

@@ -452,6 +452,9 @@ function mergedSeed() {
     seed.categoriaFotos = { ...seed.categoriaFotos, ...(old.categoriaFotos || {}) };
     seed.esgotados = old.esgotados || [];
     if (old.DESTAQUES) seed.DESTAQUES = old.DESTAQUES;
+    if (old.NOVIDADES) seed.NOVIDADES = old.NOVIDADES;
+    if (old.TAGS_COMBO) seed.TAGS_COMBO = old.TAGS_COMBO;
+    if (old.FOTOS_CARD) seed.FOTOS_CARD = old.FOTOS_CARD;
     // preserva os RECIPIENTES da loja (nomes, tamanhos em ml, preços, e adições/remoções de copo/tigela).
     // Mantém recipientes novos que venham do código; o que a loja apagou continua apagado.
     if (Array.isArray(old.RECIPIENTES) && old.RECIPIENTES.length) {
@@ -559,7 +562,7 @@ function renderCardapio() {
   menu.FOTOS_SEED = menu.FOTOS_SEED || {};
   const espCard = el('div', { class: 'panel-card' }, [el('h3', { text: 'Fotos: Monte, Frapê, Milk Shake' }), el('p', { class: 'hint', text: 'Foto desses produtos especiais (salada e diversos têm foto nas seções abaixo).' })]);
   [['monte', 'Monte Seu Açaí'], ['frape', 'Frapê'], ['milkshake', 'Milk Shake']].forEach(([key, nome]) => {
-    espCard.append(menuRow({ id: key, nome, foto: menu.FOTOS_SEED[key], price: null, noStar: true, onFoto: (url) => { menu.FOTOS_SEED[key] = url; } }));
+    espCard.append(menuRow({ id: key, nome, foto: menu.FOTOS_SEED[key], price: null, noStar: true, onFoto: (url) => { menu.FOTOS_SEED[key] = url; if (menu.FOTOS_CARD) delete menu.FOTOS_CARD[key]; } }));
   });
   espCard.append(saveBtn(menu));
   host.append(espCard);
@@ -713,13 +716,13 @@ function renderCardapio() {
   host.append(cupCard);
 
   // Combinados: nome, ingredientes, preço, destaque, esgotado, foto, adicionar/remover
-  const combosCard = el('div', { class: 'panel-card' }, [el('h3', { text: 'Combinados' }), el('p', { class: 'hint', text: 'Edite nome e ingredientes. Estrela = TOP 5. Chave = esgotado. Valor = preço base (o tamanho soma por cima). "+ Novo" cria um combinado.' })]);
+  const combosCard = el('div', { class: 'panel-card' }, [el('h3', { text: 'Combinados' }), el('p', { class: 'hint', text: 'Edite nome e ingredientes. Estrela = TOP 5. NOVO = aparece na seção Novidades. Chave = esgotado. Valor = preço base (o tamanho soma por cima). "+ Novo" cria um combinado.' })]);
   menu.COMBOS.forEach((c) => combosCard.append(menuRow({
     id: c.id, nome: c.nome, sub: c.desc, price: c.valorBase, foto: menu.FOTOS_SEED?.[c.id],
-    isDestaque: (menu.DESTAQUES || []).includes(c.id), esgotado: esgot.has(c.id),
+    isDestaque: (menu.DESTAQUES || []).includes(c.id), isNovidade: (menu.NOVIDADES || []).includes(c.id), esgotado: esgot.has(c.id),
     onName: (v) => { c.nome = v; }, onDesc: (v) => { c.desc = v; },
-    onPrice: (v) => { c.valorBase = v; }, onStar: () => toggleDestaque(menu, c.id),
-    onEsg: () => toggleEsg(menu, c.id), onFoto: (url) => { (menu.FOTOS_SEED = menu.FOTOS_SEED || {})[c.id] = url; },
+    onPrice: (v) => { c.valorBase = v; }, onStar: () => toggleDestaque(menu, c.id), onNov: () => toggleNovidade(menu, c.id),
+    onEsg: () => toggleEsg(menu, c.id), onFoto: (url) => { (menu.FOTOS_SEED = menu.FOTOS_SEED || {})[c.id] = url; if (menu.FOTOS_CARD) delete menu.FOTOS_CARD[c.id]; },
     onRemove: () => { if (confirm(`Remover "${c.nome}"?`)) { (menu.removidos = menu.removidos || []).push(c.id); menu.COMBOS = menu.COMBOS.filter((x) => x.id !== c.id); renderCardapio(); } },
   })));
   combosCard.append(el('button', { class: 'btn btn-ghost mini', style: 'margin-top:8px', text: '+ Novo combinado', onclick: () => { menu.COMBOS.push({ id: 'combo-' + Date.now(), nome: 'Novo combinado', desc: '', valorBase: 10 }); renderCardapio(); } }));
@@ -818,7 +821,7 @@ function renderCardapio() {
   [['SALADAS', 'Saladas'], ['SOBREMESAS', 'Diversos'], ['BEBIDAS', 'Bebidas']].forEach(([k, label]) => {
     const card = el('div', { class: 'panel-card' }, [el('h3', { text: label }), el('p', { class: 'hint', text: 'Edite nome, descrição e preço. "+ Adicionar" cria um item.' })]);
     menu[k].forEach((p) => {
-      card.append(menuRow({ id: p.id, nome: p.nome, sub: p.desc, price: p.preco, foto: menu.FOTOS_SEED?.[p.id], esgotado: esgot.has(p.id), onName: (v) => { p.nome = v; }, onDesc: (v) => { p.desc = v; }, onPrice: (v) => { p.preco = v; }, onFoto: (url) => { (menu.FOTOS_SEED = menu.FOTOS_SEED || {})[p.id] = url; }, onEsg: () => toggleEsg(menu, p.id), noStar: true, onRemove: () => { if (confirm(`Remover "${p.nome}"?`)) { (menu.removidos = menu.removidos || []).push(p.id); menu[k] = menu[k].filter((x) => x.id !== p.id); renderCardapio(); } } }));
+      card.append(menuRow({ id: p.id, nome: p.nome, sub: p.desc, price: p.preco, foto: menu.FOTOS_SEED?.[p.id], esgotado: esgot.has(p.id), onName: (v) => { p.nome = v; }, onDesc: (v) => { p.desc = v; }, onPrice: (v) => { p.preco = v; }, onFoto: (url) => { (menu.FOTOS_SEED = menu.FOTOS_SEED || {})[p.id] = url; if (menu.FOTOS_CARD) delete menu.FOTOS_CARD[p.id]; }, onEsg: () => toggleEsg(menu, p.id), noStar: true, onRemove: () => { if (confirm(`Remover "${p.nome}"?`)) { (menu.removidos = menu.removidos || []).push(p.id); menu[k] = menu[k].filter((x) => x.id !== p.id); renderCardapio(); } } }));
       if (k === 'BEBIDAS') card.append(tiposEditor(p));
     });
     card.append(el('button', { class: 'btn btn-ghost mini', style: 'margin-top:8px', text: '+ Adicionar', onclick: () => { menu[k].push({ id: k.toLowerCase() + '-' + Date.now(), nome: 'Novo item', desc: '', preco: 5, ...(k === 'SALADAS' ? { acomp: true } : {}) }); renderCardapio(); } }));
@@ -827,7 +830,7 @@ function renderCardapio() {
   });
 }
 
-function menuRow({ id, nome, sub, price, foto, isDestaque, esgotado, onPrice, onStar, onEsg, onFoto, onName, onDesc, onRemove, simple, noStar }) {
+function menuRow({ id, nome, sub, price, foto, isDestaque, isNovidade, onNov, esgotado, onPrice, onStar, onEsg, onFoto, onName, onDesc, onRemove, simple, noStar }) {
   const priceInput = price == null ? null : el('input', { class: 'price', type: 'number', step: '0.50', value: Number(price).toFixed(2) });
   if (priceInput) priceInput.addEventListener('input', () => onPrice(parseFloat(priceInput.value) || 0));
   // Nome: editável quando onName é passado; senão texto.
@@ -842,6 +845,7 @@ function menuRow({ id, nome, sub, price, foto, isDestaque, esgotado, onPrice, on
     !simple ? (foto ? el('img', { class: 'mi-thumb', src: imgUrl(foto, 120, 72), loading: 'lazy', decoding: 'async', onerror: function () { if (this.dataset.orig) this.replaceWith(el('div', { class: 'mi-thumb', html: '<span>🍧</span>' })); else { this.dataset.orig = '1'; this.src = foto; } } }) : el('div', { class: 'mi-thumb', html: '<span>🍧</span>' })) : null,
     el('div', { class: 'mi-name' }, [nameEl, descEl]),
     !noStar && !simple ? starEl(isDestaque, onStar) : null,
+    onNov ? novEl(isNovidade, onNov) : null,
     priceInput,
     onFoto ? fotoBtn(onFoto) : null,
     onEsg ? esgSwitch(esgotado, onEsg) : null,
@@ -871,6 +875,7 @@ function tiposEditor(p) {
   render();
   return wrap;
 }
+function novEl(on, cb) { const s = el('span', { class: 'nov' + (on ? ' on' : ''), text: 'NOVO', title: 'Mostrar na seção Novidades' }); s.addEventListener('click', () => { const nowOn = cb(); s.classList.toggle('on', nowOn); }); return s; }
 function starEl(on, cb) { const s = el('span', { class: 'star' + (on ? ' on' : ''), text: '★' }); s.addEventListener('click', () => { const nowOn = cb(); s.classList.toggle('on', nowOn); }); return s; }
 function esgSwitch(on, cb) { const inp = el('input', { type: 'checkbox' }); inp.checked = !on; const lbl = el('label', { class: 'switch', title: 'Disponível' }, [inp, el('span')]); inp.addEventListener('change', () => cb()); return lbl; }
 // Comprime/redimensiona no navegador antes de subir (sem perda visível, deixa o site leve)
@@ -921,6 +926,7 @@ function fotoBtn(cb) {
   });
   b.append(file); return b;
 }
+function toggleNovidade(menu, id) { menu.NOVIDADES = menu.NOVIDADES || []; const i = menu.NOVIDADES.indexOf(id); if (i >= 0) menu.NOVIDADES.splice(i, 1); else menu.NOVIDADES.push(id); return menu.NOVIDADES.includes(id); }
 function toggleDestaque(menu, id) { menu.DESTAQUES = menu.DESTAQUES || []; const i = menu.DESTAQUES.indexOf(id); if (i >= 0) menu.DESTAQUES.splice(i, 1); else menu.DESTAQUES.push(id); return menu.DESTAQUES.includes(id); }
 function toggleEsg(menu, id) { menu.esgotados = menu.esgotados || []; const i = menu.esgotados.indexOf(id); if (i >= 0) menu.esgotados.splice(i, 1); else menu.esgotados.push(id); return menu.esgotados.includes(id); }
 function saveBtn(menu) { return el('button', { class: 'btn btn-primary', style: 'margin-top:14px', text: 'Salvar alterações', onclick: (e) => { e.target.disabled = true; saveMenu(menu).then(() => { e.target.disabled = false; }); } }); }
