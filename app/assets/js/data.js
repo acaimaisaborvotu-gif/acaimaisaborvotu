@@ -51,8 +51,21 @@ export function precosVersao(m = menu()) {
 export async function hydrate() {
   if (!hasSupabase()) return;
   try {
-    const client = await sb();
-    const { data } = await client.from('store_config').select('menu, settings').eq('store_slug', CONFIG.STORE_ID).maybeSingle();
+    // Leitura DIRETA, sem a biblioteca do Supabase (que custava ~0,64s no 4G só pra isto).
+    // 1) a resposta que o index.html já pediu no instante em que a página abriu (usa uma vez só)
+    // 2) se não veio: pede direto agora   3) se falhar: o caminho antigo, pela biblioteca
+    let data = null;
+    try { const pre = window.__cardapio; window.__cardapio = null; const l = pre ? await pre : null; if (Array.isArray(l) && l[0]) data = l[0]; } catch (e) {}
+    if (!data) {
+      try {
+        const r = await fetch(`${CONFIG.SUPABASE_URL}/rest/v1/store_config?store_slug=eq.${encodeURIComponent(CONFIG.STORE_ID)}&select=menu,settings`, { headers: { apikey: CONFIG.SUPABASE_ANON_KEY } });
+        if (r.ok) { const l = await r.json(); if (Array.isArray(l) && l[0]) data = l[0]; }
+      } catch (e) {}
+    }
+    if (!data) {
+      const client = await sb();
+      ({ data } = await client.from('store_config').select('menu, settings').eq('store_slug', CONFIG.STORE_ID).maybeSingle());
+    }
     if (data?.menu) MENU = data.menu;
     if (data?.settings) SETTINGS_HYDRATED = data.settings;
     try { localStorage.setItem(CACHE_KEY, JSON.stringify({ menu: MENU, settings: SETTINGS_HYDRATED })); } catch (e) {}

@@ -4,14 +4,30 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#4a1052" />
+  <!-- Le o cardapio no INSTANTE em que a pagina abre, em paralelo com o resto (pedido direto ao
+       banco, sem a biblioteca do Supabase). Antes so era pedido depois de baixar a biblioteca:
+       ~1,3s no 4G; as fotos esperavam isso. A chave e a publica, a mesma do assets/js/config.js.
+       Ela vai NA URL e nao em cabecalho: sem cabecalho extra o navegador nao faz a pergunta
+       previa (OPTIONS) ao Supabase, uma ida e volta a menos (o Supabase aceita a chave assim).
+       O data.js usa esta resposta (window.__cardapio) e, se falhar, pede de novo pelo caminho normal. -->
+  <script>
+    try {
+      window.__cardapio = fetch('https://favfyeyyzopsoigvyyim.supabase.co/rest/v1/store_config?store_slug=eq.acai-mais-sabor&select=menu,settings&apikey=sb_publishable_RjfJ17RTGzGLpFrikEb_YA_KZ_28DdD')
+        .then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
+    } catch (e) {}
+  </script>
   <title>Açaí Mais Sabor | Açaí em Votuporanga - Peça já o seu</title>
   <meta name="description" content="Açaí Mais Sabor em Votuporanga: monte seu açaí com cremes (ninho, cupuaçu) e adicionais (leite em pó, Nutella, morango) ou escolha um combinado. Delivery rápido no Patrimônio Velho e região. Peça já!" />
   <link rel="canonical" href="https://acaimaisaborvotu.com.br/" />
   <meta name="robots" content="index, follow, max-image-preview:large" />
 
   <!-- Favicon (logo da loja - versão quadrada, nítida na aba) -->
-  <link rel="icon" type="image/png" href="assets/img/logo-fita.png" />
-  <link rel="apple-touch-icon" href="assets/img/logo-fita.png" />
+  <!-- icones no tamanho certo: o logo-fita.png tem 532KB e era baixado so pra aba (10/10/2026) -->
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/img/icone-32.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/img/icone-180.png" />
+  <!-- abre a conexao com o Supabase (cardapio e fotos do modal) enquanto a pagina carrega -->
+  <link rel="preconnect" href="https://favfyeyyzopsoigvyyim.supabase.co" crossorigin />
+  <link rel="preconnect" href="https://favfyeyyzopsoigvyyim.supabase.co" />
 
   <!-- Open Graph (preview no WhatsApp / Instagram / Facebook) -->
   <meta property="og:type" content="website" />
@@ -64,7 +80,6 @@
 
   <!-- Acelera a primeira visita: conecta cedo e baixa os módulos em paralelo -->
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
-  <link rel="preconnect" href="https://favfyeyyzopsoigvyyim.supabase.co" crossorigin />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="modulepreload" href="assets/js/cardapio.js" />
   <link rel="modulepreload" href="assets/js/data.js" />
@@ -75,6 +90,9 @@
   <link rel="modulepreload" href="assets/js/tracking.js" />
   <link rel="modulepreload" href="assets/js/product-modal.js" />
   <link rel="modulepreload" href="assets/js/checkout.js" />
+  <!-- faltava: sem ele o attribution.js so era pedido depois do cardapio.js chegar e a pagina
+       inteira esperava por ele (~0,25s no 4G, medido em 10/10/2026) -->
+  <link rel="modulepreload" href="assets/js/attribution.js" />
 
   <!-- Google Tag Manager (não carrega em localhost: teste não polui os dados reais) -->
   <script>if(!/^(localhost|127\.|0\.0\.0\.0|192\.168\.)/.test(location.hostname)){(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
@@ -94,7 +112,7 @@
 
   <div id="loading" style="position:fixed;inset:0;display:grid;place-items:center;background:#f7f3f7;z-index:99">
     <div style="text-align:center;max-width:90vw">
-      <img src="assets/img/logo.png" alt="Açaí Mais Sabor - Açaí em Votuporanga" style="width:210px;max-width:62vw" />
+      <img src="assets/img/logo-hero.webp" onerror="this.onerror=null;this.src='assets/img/logo.png'" alt="Açaí Mais Sabor - Açaí em Votuporanga" style="width:210px;max-width:62vw;height:auto" />
       <h1 style="font:600 1.05rem system-ui,sans-serif;color:#4a1052;margin:12px 0 0">Açaí Mais Sabor · Votuporanga</h1>
       <p style="font:400 .85rem system-ui,sans-serif;color:#7a5a7a;margin:5px auto 0;max-width:340px">Monte seu açaí com cremes (ninho, cupuaçu) e adicionais (leite em pó, Nutella, morango), ou peça um combinado. Delivery rápido no Patrimônio Velho e região de Votuporanga.</p>
       <div class="spin" style="margin:14px auto 0"></div>

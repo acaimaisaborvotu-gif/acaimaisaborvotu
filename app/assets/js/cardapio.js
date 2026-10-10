@@ -22,6 +22,10 @@ const markAddCart = () => { if (!_addCartTracked) { _addCartTracked = true; trac
 if (cart.getItems().length) markAddCart();
 cart.onChange((items) => { if (items.length) markAddCart(); });
 
+// Logo leve: a original (logo.png) tem 294KB e 1000px, exibida com ~190px; atrasava ~2s as
+// fotos no 4G (medido em 10/10/2026). Celular que nao abre WebP cai na original.
+const LOGO_LEVE = 'assets/img/logo-hero.webp';
+function logoReserva() { if (this.dataset.reserva) return; this.dataset.reserva = '1'; this.src = 'assets/img/logo.png'; }   // troca uma vez so, sem repeticao
 const ICON = {
   search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>',
   bag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 7h12l-1 13H7L6 7Z"/><path d="M9 7a3 3 0 0 1 6 0"/></svg>',
@@ -45,7 +49,7 @@ function header() {
   const cartBtn = el('button', { class: 'icon-btn', id: 'cartBtn', 'aria-label': 'Sacola', html: ICON.bag });
   cartBtn.append(el('span', { class: 'count', id: 'cartCount', text: '0', style: 'display:none' }));
   cartBtn.addEventListener('click', openCart);
-  const logo = el('img', { class: 'logo-img', src: 'assets/img/logo.png', alt: 'Açaí Mais Sabor', style: 'cursor:pointer', title: 'Voltar ao início' });
+  const logo = el('img', { class: 'logo-img', src: LOGO_LEVE, onerror: logoReserva, alt: 'Açaí Mais Sabor', style: 'cursor:pointer', title: 'Voltar ao início' });
   logo.addEventListener('click', () => {
     const input = document.querySelector('.search input');
     if (input && input.value) { input.value = ''; query = ''; renderSections(); }
@@ -68,7 +72,7 @@ function header() {
 function hero() {
   const aberto = isOpenNow(settings);
   return el('div', { class: 'hero' }, el('div', { class: 'container inner' }, [
-    el('img', { class: 'hero-logo', src: 'assets/img/logo.png', alt: 'Açaí Mais Sabor' }),
+    el('img', { class: 'hero-logo', src: LOGO_LEVE, onerror: logoReserva, alt: 'Açaí Mais Sabor', fetchpriority: 'high', width: 400, height: 250 }),
     el('h1', { class: 'hero-h1', html: 'O Açaí oficial<br>de <em>Votuporanga</em>' }),
     el('div', { class: 'hero-status' }, el('span', { class: 'pill ' + (aberto ? 'pill-ok' : 'pill-closed') }, [el('span', { class: 'dot' }), aberto ? 'Aberto agora' : (nextOpenLabel(settings) ? `Fechado, abre ${nextOpenLabel(settings)}` : 'Fechado no momento')])),
   ]));
@@ -91,7 +95,7 @@ function rodape() {
   const telFmt = tel.length === 11 ? `(${tel.slice(0, 2)}) ${tel.slice(2, 7)}-${tel.slice(7)}` : tel;
   const hr = horarioTexto();
   return el('footer', { class: 'rodape' }, el('div', { class: 'container' }, [
-    el('img', { src: 'assets/img/logo.png', alt: 'Açaí Mais Sabor', loading: 'lazy' }),
+    el('img', { src: LOGO_LEVE, onerror: logoReserva, alt: 'Açaí Mais Sabor', loading: 'lazy' }),
     el('p', { html: `Rua Pernambuco, 3507 · Patrimônio Velho · Votuporanga/SP${hr ? '<br>' + hr : ''}<br>` +
       (telFmt ? `<a href="https://wa.me/55${tel}" target="_blank" rel="noopener">${telFmt}</a> · ` : '') +
       '<a href="https://www.instagram.com/acai_mais_saborvotuporanga/" target="_blank" rel="noopener">@acai_mais_saborvotuporanga</a>' }),
@@ -130,14 +134,22 @@ function catNav() {
   return el('nav', { class: 'cat-nav', id: 'catNav' }, track);
 }
 
-function thumb(item, big) {
+// Foto de card servida pelo PROPRIO site (/fotos-card/v1/{tam}/...), ja no tamanho certo:
+// sem o Supabase gerar a foto na hora (0,5 a 0,7s por foto quando o cache dele esfria, medido
+// em 10/10/2026). {tam}: 640 nos destaques, 320 na lista. Outra URL (Storage): como sempre.
+// Em WebP q80 (39% mais leve que JPEG e mais fiel). Celular antigo que nao abre WebP (iOS 13
+// pra tras) cai no onerror do thumb() e recebe a foto do Supabase.
+function srcCard(u, box, q) { return u && u.includes('{tam}') ? u.replace('{tam}', box > 400 ? '640' : '320') : imgUrl(u, box, q); }
+
+// prio: as 2 primeiras fotos do TOP 5 (as que aparecem na tela sem rolar) pedem na frente das outras
+function thumb(item, big, prio) {
   const foto = item.fotoCard || item.foto;   // card: padronizada; o modal usa item.foto (original)
   if (foto) return el('img', {
-    class: big ? 'ph' : 'thumb', src: imgUrl(foto, big ? 640 : 400, big ? 74 : 72),
-    alt: item.nome, loading: 'lazy', decoding: 'async',
+    class: big ? 'ph' : 'thumb', src: srcCard(foto, big ? 640 : 400, big ? 74 : 72),
+    alt: item.nome, loading: prio ? 'eager' : 'lazy', fetchpriority: prio ? 'high' : null, decoding: 'async',
     onerror: function () {
       if (this.dataset.orig) this.replaceWith(el('div', { class: (big ? 'ph' : 'thumb') + ' ph' }, el('span', { text: item.emoji })));
-      else { this.dataset.orig = '1'; this.src = foto; }  // transformação falhou -> tenta o arquivo sem transformar
+      else { this.dataset.orig = '1'; this.src = foto.includes('{tam}') && item.foto ? imgUrl(item.foto, 640, 74) : foto; }  // falhou -> tenta a foto do Supabase
     },
   });
   return el('div', { class: (big ? 'ph' : 'thumb') + ' ph' }, el('span', { text: item.emoji }));
@@ -173,7 +185,7 @@ function card(item) {
 function monteCard(item) {
   const c = el('div', { class: 'card', style: 'background:var(--grad-acai);color:#fff;border:none' }, [
     (item.fotoCard || item.foto)
-      ? el('img', { class: 'thumb', src: imgUrl(item.fotoCard || item.foto, 400, 72), alt: item.nome, loading: 'lazy', decoding: 'async', onerror: function () { if (this.dataset.orig) this.replaceWith(el('div', { class: 'thumb ph', style: 'background:rgba(255,255,255,.15)' }, el('span', { text: '🍨' }))); else { this.dataset.orig = '1'; this.src = item.fotoCard || item.foto; } } })
+      ? el('img', { class: 'thumb', src: srcCard(item.fotoCard || item.foto, 400, 72), alt: item.nome, loading: 'lazy', decoding: 'async', onerror: function () { if (this.dataset.orig) this.replaceWith(el('div', { class: 'thumb ph', style: 'background:rgba(255,255,255,.15)' }, el('span', { text: '🍨' }))); else { this.dataset.orig = '1'; this.src = item.foto ? imgUrl(item.foto, 400, 72) : ''; } } })
       : el('div', { class: 'thumb ph', style: 'background:rgba(255,255,255,.15)' }, el('span', { text: '🍨' })),
     el('div', { class: 'body' }, [
       el('h3', { style: 'color:#fff', text: item.nome }),
@@ -227,11 +239,11 @@ function acenar(el) {
   io.observe(el);
 }
 
-function featured(items, selo, seloCls = 't-nv') {
+function featured(items, selo, seloCls = 't-nv', prioridade = 0) {
   const track = el('div', { class: 'featured' });
   items.forEach((item, i) => {
     const f = el('div', { class: 'fcard' }, [
-      thumb(item, true),
+      thumb(item, true, i < prioridade),
       // o selo vem DEPOIS da foto: no Safari do iPhone, a foto carregada sob demanda era
       // pintada por cima do selo quando ele vinha antes (na lista, que já era depois, não sumia)
       selo ? el('span', { class: 'fselo ' + seloCls, text: typeof selo === 'function' ? selo(i) : selo }) : null,
@@ -328,7 +340,7 @@ function milkshakeBox(item) {
   const sabores = (ms.sabores || []).map((s) => s.nome || s).filter(Boolean);
   const box = el('div', { class: 'mk-box', role: 'button', tabindex: '0' }, [
     el('div', { class: 'mk-head' }, [
-      (item.fotoCard || item.foto) ? el('img', { src: imgUrl(item.fotoCard || item.foto, 240, 74), alt: item.nome, loading: 'lazy', decoding: 'async' }) : null,
+      (item.fotoCard || item.foto) ? el('img', { src: srcCard(item.fotoCard || item.foto, 240, 74), alt: item.nome, loading: 'lazy', decoding: 'async' }) : null,
       el('div', {}, [el('h3', { text: item.nome || 'Milk-shake' }), el('p', { text: 'Escolha o tamanho e o sabor.' })]),
     ]),
     el('div', { class: 'passo' }, [
@@ -377,7 +389,7 @@ function renderSections() {
       inner.append(el('div', { class: 'grid' }, c.items.map(card)));
     }
     const sec = el('section', { class: 'section', id: 'sec-' + c.id });
-    if (c.tipo === 'destaques') { sec.append(el('div', { class: 'container' }, el('h2', { text: c.nome })), featured(c.items, (i) => `#${i + 1} mais pedido`, 't-mp')); }
+    if (c.tipo === 'destaques') { sec.append(el('div', { class: 'container' }, el('h2', { text: c.nome })), featured(c.items, (i) => `#${i + 1} mais pedido`, 't-mp', 2)); }
     else sec.append(inner);
     sectionsHost.append(sec);
     if (c.tipo === 'destaques') {

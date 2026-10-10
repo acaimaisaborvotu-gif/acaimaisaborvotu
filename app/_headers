@@ -1,0 +1,10 @@
+# Cache longo nas fotos de card: o nome da pasta tem versao (v1). Se uma foto mudar, ela vai
+# pra fotos-card/v2/ e o FOTOS_CARD do cardapio aponta pra la; o celular nunca fica com a velha.
+/fotos-card/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# logo e icones leves (10/10/2026): mudam raramente; 1 semana de cache no celular
+/assets/img/logo-hero.webp
+  Cache-Control: public, max-age=604800
+/assets/img/icone-*
+  Cache-Control: public, max-age=604800
