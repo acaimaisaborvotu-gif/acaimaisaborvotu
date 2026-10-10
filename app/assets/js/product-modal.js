@@ -67,10 +67,15 @@ function overlayShell(item) {
     item.foto ? el('img', { src: imgUrl(item.foto, 900, 78), alt: item.nome, decoding: 'async', onerror: function () { if (this.dataset.orig) this.replaceWith(el('span', { class: 'emoji', text: item.emoji || '🍧' })); else { this.dataset.orig = '1'; this.src = item.foto; } } })
               : el('span', { class: 'emoji', text: item.emoji || '🍧' }));
   const close = el('button', { class: 'close', 'aria-label': 'Fechar', html: '&times;' });
-  hero.append(close);
   const body = el('div', { class: 'sheet-body' });
   const foot = el('div', { class: 'sheet-foot' });
-  sheet.append(hero, body, foot);
+  // A foto ROLA JUNTO com as opções (sobe e libera a tela pra escolher); o × fica preso no
+  // canto do modal e o botão Adicionar fica preso embaixo. Só neste modal: sacola, checkout
+  // e "meus pedidos" usam o .sheet-body sozinho e continuam como sempre.
+  const rolagem = el('div', { class: 'sheet-rolagem' });
+  rolagem.append(hero, body);
+  sheet.classList.add('sheet-produto');
+  sheet.append(rolagem, foot, close);
   overlay.append(sheet);
   document.body.append(overlay);
   document.body.style.overflow = 'hidden';
