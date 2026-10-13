@@ -282,6 +282,9 @@ body.pg-cardapio .hero { padding-top: 46px; }
    na altura (era 130px) decepava a cobertura e a base do copo */
 .fcard img.ph { width: 100%; height: auto; aspect-ratio: 1 / 1; object-fit: cover; display: block; }
 .fcard .fbody { padding: 10px 12px 12px; }
+.fcard.out { opacity: .55; cursor: default; }
+.fcard.out:hover { transform: none; box-shadow: none; }
+.fcard .fout { display: inline-block; margin-top: 4px; font-size: .64rem; font-weight: 800; text-transform: uppercase; letter-spacing: .4px; padding: 3px 9px; border-radius: 999px; background: rgba(224, 62, 62, .12); color: var(--danger); }
 .fcard .fbody h3 { font-size: .92rem; font-weight: 800; }
 .fcard .fbody .val { font-size: .95rem; font-weight: 900; color: var(--roxo-700); margin-top: 4px; }
 .fcard .fbody .from { font-size: .68rem; color: var(--ink-mute); font-weight: 700; }

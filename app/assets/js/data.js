@@ -274,9 +274,11 @@ export function novidades() {
   const src = menu();
   const fotos = src.FOTOS_SEED || {};
   const byId = Object.fromEntries((src.COMBOS || []).map((c) => [c.id, c]));
+  const out = soldOutSet();
   return (src.NOVIDADES || []).map((id) => byId[id]).filter(Boolean).map((c) => ({
     id: c.id, nome: c.nome, desc: c.desc, tipo: 'combo', catId: 'novidades',
     foto: fotos[c.id] || null, fotoCard: (src.FOTOS_CARD || {})[c.id] || null, precoFrom: comboFrom(c), raw: c,
+    esgotado: out.has(c.id),
   }));
 }
 
@@ -329,6 +331,31 @@ export function upsellItems() {
   const itens = (u.itens || []).filter((i) => (i.nome || '').trim() && Number(i.preco) >= 0);
   if (!itens.length) return null;
   return { titulo: u.titulo || 'Que tal adicionar?', itens };
+}
+
+// ---- Trava do esgotado na hora de enviar ----
+// Devolve o nome do que está na sacola e esgotou: produto (combinado etc.), base ou
+// acompanhamento. Pega sacola salva, "repetir pedido" e quem abriu o site antes do dono
+// marcar esgotado. O acompanhamento é achado pela seção impressa ("Frutas") + nome.
+export function esgotadosNaSacola(items) {
+  const out = soldOutSet();
+  if (!out.size) return [];
+  const m = menu();
+  const acompOut = [];
+  (m.ACOMPANHAMENTOS || []).forEach((g) => g.itens.forEach((i) => { if (out.has(i.id)) acompOut.push({ grupo: g.nome, nome: i.nome }); }));
+  const baseOut = (m.BASES || []).filter((b) => out.has(b.id)).map((b) => b.nome);
+  const limpa = (x) => String(x).replace(/^\d+x\s+/, '');
+  const achou = [];
+  (items || []).forEach((it) => {
+    if (it.refId && out.has(it.refId)) { achou.push(it.prodNome || it.nome); return; }
+    (it.print?.blocos || []).forEach((b) => {
+      if (b.t !== 'sec') return;
+      const linhas = (b.itens || []).map(limpa);
+      acompOut.forEach((a) => { if (b.nome === a.grupo && linhas.some((x) => x === a.nome || x.endsWith(' ' + a.nome))) achou.push(`${a.nome} (${a.grupo})`); });
+      if (/^bases?$/i.test(b.nome)) baseOut.forEach((n) => { if (linhas.includes(n)) achou.push(n); });
+    });
+  });
+  return [...new Set(achou)];
 }
 
 // ---- Cupons de desconto ----

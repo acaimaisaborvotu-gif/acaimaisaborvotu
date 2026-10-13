@@ -181,7 +181,13 @@ function baseGroup(state) {
 function acompGroup(group, state) {
   const box = el('div', { class: 'opt-group' });
   box.append(groupHead(group.nome, null, 'opt'));
+  const out = new Set(M.esgotados || []);
   group.itens.forEach((it) => {
+    if (out.has(it.id)) {  // esgotado no painel: aparece marcado, NÃO é opção (antes dava pra escolher, 13/10/2026)
+      state.acomp.delete(it.id);
+      box.append(el('div', { class: 'opt out' }, [el('span', { class: 'oname', text: it.nome }), el('span', { class: 'out-tag', text: 'Esgotado' })]));
+      return;
+    }
     const nEl = el('span', { class: 'n', text: '0' });
     const minus = el('button', { type: 'button', html: '&minus;', disabled: true });
     const plus = el('button', { type: 'button', html: '+' });

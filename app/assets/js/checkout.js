@@ -5,7 +5,7 @@
 
 import { el, money, toast, maskPhone, phoneCanon, phoneValido, ICON_WHATS } from './util.js';
 import * as cart from './cart.js';
-import { getStore, getSettings, isOpenNow, tempoEntrega, tempoRetirada, submitOrder, openOrdersCount, validarCupomServidor, captureLead, taxaBairro, sugestaoBairro, precosVersao } from './data.js';
+import { getStore, getSettings, isOpenNow, tempoEntrega, tempoRetirada, submitOrder, openOrdersCount, validarCupomServidor, captureLead, taxaBairro, sugestaoBairro, precosVersao, esgotadosNaSacola } from './data.js';
 import { getAttribution, clearAttribution } from './attribution.js';
 import { track, capiPurchase } from './tracking.js';
 
@@ -238,6 +238,8 @@ export function openCheckout({ openOrders: ooInicial = 0 } = {}) {
     setFoot(label, async () => {
       if (!aberto) return toast('Estamos fechados no momento');
       if (abaixoMin) return toast(`Pedido mínimo de ${money(min)}`);
+      const esg = esgotadosNaSacola(items);
+      if (esg.length) return toast(`Esgotou: ${esg.join(', ')}. Tire da sacola pra enviar o pedido.`);
       if (!paymentInfoEnviado) { paymentInfoEnviado = true; track.addPaymentInfo(items, total(), state.metodo, state.cupom?.codigo, state.telefone, state.nome); }
       await finalize();
     }, !aberto || abaixoMin);

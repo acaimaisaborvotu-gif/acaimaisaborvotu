@@ -242,7 +242,7 @@ function acenar(el) {
 function featured(items, selo, seloCls = 't-nv', prioridade = 0) {
   const track = el('div', { class: 'featured' });
   items.forEach((item, i) => {
-    const f = el('div', { class: 'fcard' }, [
+    const f = el('div', { class: 'fcard' + (item.esgotado ? ' out' : '') }, [
       thumb(item, true, i < prioridade),
       // o selo vem DEPOIS da foto: no Safari do iPhone, a foto carregada sob demanda era
       // pintada por cima do selo quando ele vinha antes (na lista, que já era depois, não sumia)
@@ -253,9 +253,11 @@ function featured(items, selo, seloCls = 't-nv', prioridade = 0) {
           ? el('div', { class: 'from', html: `de <s>${money(item.precoDe)}</s> por` })
           : el('div', { class: 'from', text: item.tipo === 'simples' ? '' : 'a partir de' }),
         el('div', { class: 'val', text: money(item.precoFrom) }),
+        item.esgotado ? el('span', { class: 'fout', text: 'Esgotado' }) : null,
       ]),
     ]);
-    f.addEventListener('click', () => open(item));
+    // esgotado no painel: aparece, mas nao abre (antes o TOP 5 deixava pedir, 13/10/2026)
+    if (!item.esgotado) f.addEventListener('click', () => open(item));
     track.append(f);
   });
   // seta pra quem usa mouse (no celular o card cortado na borda já mostra que tem mais)
