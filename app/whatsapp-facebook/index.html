@@ -10,7 +10,7 @@
        Evento custom: ClicouWhatsAppFacebook (link da bio do Facebook)
        ============================================================ -->
   <script>
-    var DESTINO = "https://acai-painel-nf.netlify.app/go/facebook";
+    var DESTINO = "https://acai-painel-nf.netlify.app/w/facebook";
     var jaFoi = false;
     function irPraWhatsApp() {
       if (jaFoi) return;
@@ -40,7 +40,7 @@
       src="https://www.facebook.com/tr?id=629750955135545&ev=PageView&noscript=1"/>
   </noscript>
 
-  <meta http-equiv="refresh" content="2; url=https://acai-painel-nf.netlify.app/go/facebook">
+  <meta http-equiv="refresh" content="2; url=https://acai-painel-nf.netlify.app/w/facebook">
 
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -83,8 +83,8 @@
   <h1>Te levando pro WhatsApp</h1>
   <p>
     Se não abrir automaticamente,
-    <a href="https://acai-painel-nf.netlify.app/go/facebook">toque aqui</a>.
+    <a href="https://acai-painel-nf.netlify.app/w/facebook">toque aqui</a>.
   </p>
-<script>/* NF 04/11/2026: repassa fbclid, gclid e UTM da pagina para o link do WhatsApp (/go do painel). Era o papel do pixel do Tintim. */(function(){try{var q=new URLSearchParams(location.search),k=["fbclid","gclid","utm_source","utm_medium","utm_campaign","utm_term","utm_content"];document.querySelectorAll('a[href*="/go/"]').forEach(function(a){try{var u=new URL(a.href);k.forEach(function(x){if(q.get(x)&&!u.searchParams.get(x))u.searchParams.set(x,q.get(x));});a.href=u.toString();}catch(e){}});}catch(e){}})();</script>
+<script>/* NF 04/11/2026: repassa fbclid, gclid e UTM da pagina para o link do WhatsApp (/go do painel). Era o papel do pixel do Tintim. */(function(){try{var q=new URLSearchParams(location.search),k=["fbclid","gclid","utm_source","utm_medium","utm_campaign","utm_term","utm_content"];document.querySelectorAll('a[href*="/go/"], a[href*="/w/"]').forEach(function(a){try{var u=new URL(a.href);k.forEach(function(x){if(q.get(x)&&!u.searchParams.get(x))u.searchParams.set(x,q.get(x));});a.href=u.toString();}catch(e){}});}catch(e){}})();</script>
 </body>
 </html>
