@@ -86,11 +86,24 @@ async function loadOrders() {
     .order('created_at', { ascending: false });
   orders = data || [];
   await marcarClientesNovos(orders);
+  await checarIfood();
 }
 
 // Marca os pedidos que são o PRIMEIRO daquele telefone. Serve de alerta antes de
 // despachar entrega: foi assim que um trote levou o entregador até uma clínica
 // (26/08/2026). Uma chamada só pra todos os telefones da tela.
+// Batimento do robô do iFood (migração 0028). Só alerta se ele já rodou alguma vez
+// e parou: antes de ligar a integração, ultimo_polling é nulo e não aparece nada.
+let ifoodParado = false;
+async function checarIfood() {
+  try {
+    const { data, error } = await client.rpc('ifood_saude', { p_store: STORE_SLUG });
+    if (error) return;                       // migração 0028 ainda não rodou
+    const r = (Array.isArray(data) ? data[0] : data) || {};
+    ifoodParado = !!r.ultimo_polling && (Date.now() - new Date(r.ultimo_polling).getTime() > 3 * 60000);
+  } catch (e) {}
+}
+
 async function marcarClientesNovos(lista) {
   const phones = [...new Set((lista || []).map((o) => o.customer_phone).filter(Boolean))];
   if (!phones.length) return;
@@ -107,7 +120,7 @@ function subscribeOrders() {
   channel?.unsubscribe();
   channel = client.channel('painel-orders')
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders', filter: `store_slug=eq.${STORE_SLUG}` }, (p) => {
-      orders.unshift(p.new); alertNew(); renderOrders();
+      orders.unshift(p.new); if (!p.new.ifood_teste) alertNew(); renderOrders();   // pedido da loja de TESTE do iFood não toca alarme
     })
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders', filter: `store_slug=eq.${STORE_SLUG}` }, (p) => {
       const i = orders.findIndex((o) => o.id === p.new.id); if (i >= 0) orders[i] = p.new; renderOrders();
@@ -189,7 +202,7 @@ function renderApp() {
   const tabs = [['pedidos', 'Pedidos'], ['clientes', 'Clientes'], isOwner ? ['dashboard', 'Dashboard'] : null, isAgencia ? ['atribuicao', 'Atribuição'] : null, ['cardapio', 'Cardápio'], isOwner ? ['config', 'Configurações'] : null, isOwner ? ['acessos', 'Acessos'] : null, ['impressora', 'Impressora']].filter(Boolean);
   const tabNav = el('div', { class: 'pn-tabs' }, tabs.map(([id, label]) => {
     const b = el('button', { class: id === tab ? 'active' : '', 'data-tab': id, text: label });
-    if (id === 'pedidos') { const n = orders.filter((o) => o.status === 'novo').length; if (n) b.append(el('span', { class: 'badge', text: n })); }
+    if (id === 'pedidos') { const n = orders.filter((o) => o.status === 'novo' && !o.ifood_teste).length; if (n) b.append(el('span', { class: 'badge', text: n })); }
     b.addEventListener('click', () => { tab = id; renderApp(); });
     return b;
   }));
@@ -254,7 +267,7 @@ function lojaStatusControl() {
 function buildReportData() {
   const fmt = (dt) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(dt);
   const hoje = fmt(new Date());
-  const doDia = orders.filter((o) => { try { return fmt(new Date(o.created_at)) === hoje; } catch (e) { return false; } });
+  const doDia = orders.filter((o) => !o.ifood_teste).filter((o) => { try { return fmt(new Date(o.created_at)) === hoje; } catch (e) { return false; } });
   const vendas = doDia.filter((o) => o.status !== 'cancelado');
   const cancelados = doDia.filter((o) => o.status === 'cancelado');
   const vendaComTaxa = vendas.reduce((s, o) => s + Number(o.total || 0), 0);
@@ -313,19 +326,25 @@ function renderOrders() {
   const host = document.getElementById('tabContent'); if (!host) return;
   host.innerHTML = '';
   host.append(lojaStatusControl());
+  if (ifoodParado) host.append(el('div', { style: 'background:#fdecea;color:#b4231c;border-radius:10px;padding:10px 12px;font-weight:800;margin:8px 0', text: '⚠ A conexão com o iFood parou de responder. Pedidos do iFood podem não estar chegando: confira o tablet do iFood e avise o suporte.' }));
   const filters = [['ativos', 'Em andamento'], ['novo', 'Novos'], ['producao', 'Em produção'], ['pronto', 'Prontos'], ['saiu', 'Saíram'], ['entregue', 'Entregues'], ['todos', 'Todos'], ['relatorio', 'Relatório do dia']];
+  // Aba dos pedidos da LOJA DE TESTE do iFood (homologação): só aparece se houver algum.
+  if (orders.some((o) => o.ifood_teste)) filters.push(['ifood_teste', '🧪 iFood teste']);
   host.append(el('div', { class: 'pn-filters' }, filters.map(([id, label]) => {
     const b = el('button', { class: id === filter ? 'active' : '', text: label });
     b.addEventListener('click', () => { filter = id; renderOrders(); });
     return b;
   })));
   // atualiza badge do tab
-  const badge = document.querySelector('.pn-tabs button[data-tab=pedidos] .badge'); const n = orders.filter((o) => o.status === 'novo').length;
+  const reais = orders.filter((o) => !o.ifood_teste);
+  const testes = orders.filter((o) => o.ifood_teste);
+  const badge = document.querySelector('.pn-tabs button[data-tab=pedidos] .badge'); const n = reais.filter((o) => o.status === 'novo').length;
   if (badge) badge.textContent = n || '';
   if (filter === 'relatorio') { renderReport(host); return; }
-  let list = orders;
-  if (filter === 'ativos') list = orders.filter((o) => !['entregue', 'cancelado'].includes(o.status));
-  else if (filter !== 'todos') list = orders.filter((o) => o.status === filter);
+  let list = reais;
+  if (filter === 'ifood_teste') { list = testes; host.append(painelTesteIfood(testes)); }
+  else if (filter === 'ativos') list = reais.filter((o) => !['entregue', 'cancelado'].includes(o.status));
+  else if (filter !== 'todos') list = reais.filter((o) => o.status === filter);
   if (!list.length) { host.append(el('div', { class: 'empty' }, [el('div', { class: 'big', text: '🍧' }), el('p', { text: 'Nenhum pedido aqui.' })])); return; }
   host.append(el('div', { class: 'orders' }, list.map(orderCard)));
 }
@@ -335,12 +354,17 @@ function orderCard(o) {
   const card = el('div', { class: 'order s-' + o.status }, [
     el('div', { class: 'ohead' }, [
       el('span', { class: 'onum', text: '#' + String(o.daily_number || 0).padStart(3, '0') }),
+      o.canal === 'ifood'
+        ? el('span', { style: 'background:#ea1d2c;color:#fff;border-radius:6px;padding:2px 7px;font-weight:800;font-size:.72rem', text: (o.ifood_teste ? '🧪 TESTE iFood' : 'iFood') + (o.ifood_display_id ? ' #' + o.ifood_display_id : '') })
+        : null,
       el('span', { class: 'otime', text: new Date(o.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) }),
       el('span', { class: 'ostatus', style: `background:${STATUS_COLOR[o.status]}22;color:${STATUS_COLOR[o.status]}`, text: s.label }),
     ]),
     el('div', { class: 'obody' }, [
       el('div', { class: 'ocust', text: o.customer_name }),
       el('div', { class: 'oinfo', text: `${o.customer_phone} · ${o.delivery_type === 'retirada' ? 'Retirada' : 'Entrega'}` }),
+      o.canal === 'ifood' ? ifoodDisputa(o) : null,
+      o.canal === 'ifood' ? ifoodInfo(o) : null,
       // 1º pedido desse telefone: confira antes de mandar o entregador.
       o._pedidosDoCliente === 1
         ? el('div', { class: 'oinfo', style: 'background:rgba(232,150,0,.14);color:#a06400;border-radius:8px;padding:5px 8px;font-weight:700;margin:4px 0',
@@ -374,7 +398,7 @@ function orderCard(o) {
 
 async function advance(o) {
   const ns = nextStep(o); if (!ns) return;
-  if (o.status === 'novo') { await doPrint(o); } // aceite imprime
+  if (o.status === 'novo' && !o.ifood_teste) { await doPrint(o); } // aceite imprime (pedido de teste do iFood não: não vai papel pra cozinha)
   const patch = { status: ns.next };
   if (ns.next === 'aceito') patch.accepted_at = new Date().toISOString();
   const { error } = await client.from('orders').update(patch).eq('id', o.id);
@@ -384,11 +408,82 @@ async function advance(o) {
 
 // Cancela o pedido (erro no pedido ou cliente desistiu). Pede confirmação porque
 // o cliente passa a ver "cancelado" no acompanhamento e sai do faturamento.
+// Faixa da aba de teste: explica e deixa o dono apagar tudo depois da homologação.
+function painelTesteIfood(testes) {
+  const box = el('div', { style: 'background:#eef4ff;border-radius:10px;padding:10px 12px;margin:8px 0;display:flex;gap:10px;align-items:center;flex-wrap:wrap' }, [
+    el('div', { style: 'flex:1;min-width:220px', text: `🧪 Pedidos da loja de TESTE do iFood (${testes.length}). Não tocam alarme, não imprimem sozinhos e não são pedidos de verdade.` }),
+  ]);
+  if (profile.role === 'owner') box.append(el('button', { class: 'btn btn-ghost mini', text: 'Apagar pedidos de teste', onclick: async () => {
+    if (!confirm('Apagar TODOS os pedidos de teste do iFood? Pedidos de verdade não são afetados.')) return;
+    const { data, error } = await client.rpc('ifood_limpar_testes', { p_store: STORE_SLUG });
+    if (error) return toast('Erro: ' + error.message);
+    orders = orders.filter((o) => !o.ifood_teste); filter = 'ativos'; renderOrders();
+    toast(`${data || 0} pedido(s) de teste apagado(s)`);
+  } }));
+  return box;
+}
+
+// Reclamação do cliente no iFood (plataforma de negociação). Tem prazo: sem resposta,
+// o iFood decide sozinho. Só o dono responde.
+function ifoodDisputa(o) {
+  const d = o.ifood_extra?.disputa;
+  if (!d) return null;
+  const ACAO = { CANCELLATION: 'cancelar o pedido', PARTIAL_CANCELLATION: 'cancelar parte do pedido', PROPOSED_AMOUNT_REFUND: 'reembolso de um valor' };
+  const linhas = [el('div', { style: 'font-weight:800', text: `⚠ Reclamação do cliente: quer ${ACAO[d.acao] || d.acao || 'negociar'}` })];
+  if (d.mensagem) linhas.push(el('div', { text: '“' + d.mensagem + '”' }));
+  if (d.situacao === 'aguardando') {
+    if (d.expira_em) linhas.push(el('div', { style: 'font-weight:700', text: `Responder até ${new Date(d.expira_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}. Sem resposta, o iFood decide sozinho.` }));
+    if (profile.role === 'owner') {
+      const responder = async (acao, motivo, alt) => {
+        const { error } = await client.rpc('ifood_responder_disputa', { p_order_id: o.id, p_acao: acao, p_motivo: motivo || null, p_alternativa: alt || null });
+        if (error) return toast('Erro: ' + error.message);
+        toast('Resposta enviada ao iFood');
+      };
+      const botoes = [
+        el('button', { class: 'btn btn-ghost mini', text: 'Aceitar', onclick: () => confirm('Aceitar o pedido do cliente?') && responder('aceitar') }),
+        el('button', { class: 'btn btn-ghost mini', text: 'Recusar', onclick: () => { const m = prompt('Motivo da recusa (o cliente vê):'); if (m && m.trim()) responder('recusar', m.trim()); } }),
+      ];
+      (d.alternativas || []).forEach((a) => botoes.push(el('button', { class: 'btn btn-ghost mini', text: 'Propor: ' + (a.type === 'REFUND' ? 'reembolso' : a.type === 'ADDITIONAL_TIME' ? 'mais tempo' : a.type === 'BENEFIT' ? 'cupom' : a.type), onclick: () => confirm('Enviar essa proposta ao cliente?') && responder('alternativa', null, a.id) })));
+      linhas.push(el('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;margin-top:4px' }, botoes));
+    } else linhas.push(el('div', { text: 'Chame o dono para responder.' }));
+  } else if (d.situacao === 'respondida') linhas.push(el('div', { text: `Respondido: ${d.resposta}${d.motivo ? ' (' + d.motivo + ')' : ''}. Aguardando o iFood.` }));
+  else linhas.push(el('div', { text: 'Reclamação encerrada pelo iFood.' }));
+  return el('div', { class: 'oinfo', style: 'background:#fdecea;color:#7a1c14;border-radius:8px;padding:6px 8px;margin:4px 0;display:grid;gap:2px' }, linhas);
+}
+
+// Pedido do iFood: o que o entregador/atendente precisa ver (exigência da homologação:
+// pagamento com bandeira e troco, cupom e quem paga, CPF, código de coleta).
+function ifoodInfo(o) {
+  const x = o.ifood_extra || {};
+  const linhas = [];
+  const receber = Number(x.a_receber) || 0;
+  linhas.push(receber > 0
+    ? el('div', { style: 'font-weight:800;color:#a06400', text: `💵 Receber na entrega: ${money(receber)}` })
+    : el('div', { style: 'font-weight:800;color:var(--ok)', text: '✅ Já pago no iFood, não cobrar' }));
+  (x.pagamentos || []).forEach((pg) => linhas.push(el('div', { text: `${pg.rotulo}: ${money(pg.valor)}${pg.troco_para ? ` (troco p/ ${money(pg.troco_para)})` : ''}` })));
+  (x.cupons || []).forEach((c) => linhas.push(el('div', { text: `🎟 Cupom ${money(c.valor)}${(c.patrocinio || []).length ? ' · pago por ' + c.patrocinio.map((pp) => (pp.quem === 'IFOOD' ? 'iFood' : pp.quem === 'MERCHANT' ? 'loja' : pp.quem) + ' ' + money(pp.valor)).join(' + ') : ''}` })));
+  if (x.codigo_coleta) linhas.push(el('div', { text: `🔑 Código de coleta: ${x.codigo_coleta}` }));
+  if (x.cpf_cnpj) linhas.push(el('div', { text: `CPF/CNPJ na nota: ${x.cpf_cnpj}` }));
+  if (x.agendado_para) linhas.push(el('div', { style: 'font-weight:800', text: `📅 Agendado para ${new Date(x.agendado_para).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}` }));
+  return el('div', { class: 'oinfo', style: 'background:rgba(234,29,44,.07);border-radius:8px;padding:6px 8px;margin:4px 0;display:grid;gap:2px' }, linhas);
+}
+
 async function cancelOrder(o) {
   if (profile.role !== 'owner') return toast('Só o dono pode cancelar pedido.');
   const num = '#' + String(o.daily_number || 0).padStart(3, '0');
-  if (!confirm(`Cancelar o pedido ${num}? O cliente vai ver como cancelado e ele sai do faturamento.`)) return;
-  const { error } = await client.from('orders').update({ status: 'cancelado' }).eq('id', o.id);
+  const upd = { status: 'cancelado' };
+  if (o.canal === 'ifood') {
+    // O iFood exige um motivo da lista oficial deles (veio junto com o pedido).
+    const motivos = (o.ifood_extra?.motivos_cancelamento || []).filter((m) => m.codigo);
+    const lista = motivos.length ? motivos : [{ codigo: '501', descricao: 'Problemas de sistema na loja' }];
+    const resp = prompt(`Cancelar o pedido ${num} no iFood?\nO iFood cobra multa/penalidade por cancelamento em excesso.\n\nDigite o número do motivo:\n` +
+      lista.map((m, i) => `${i + 1} - ${m.descricao}`).join('\n'));
+    if (resp === null) return;
+    const m = lista[Number(resp) - 1];
+    if (!m) return toast('Motivo inválido. Nada foi cancelado.');
+    upd.ifood_motivo_cancel = m.codigo;
+  } else if (!confirm(`Cancelar o pedido ${num}? O cliente vai ver como cancelado e ele sai do faturamento.`)) return;
+  const { error } = await client.from('orders').update(upd).eq('id', o.id);
   if (error) return toast('Erro ao cancelar');
   o.status = 'cancelado'; renderOrders();
   toast(`Pedido ${num} cancelado`);

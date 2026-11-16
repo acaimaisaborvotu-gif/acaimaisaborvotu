@@ -35,6 +35,9 @@ const money = (v) => 'R$ ' + (Number(v) || 0).toFixed(2).replace('.', ',');
 // Cabeçalho com tipo + número do pedido: "Pedido Entrega 001" / "Pedido Retirada 001"
 const pedidoLabel = (order) => 'Pedido ' + (order.delivery_type === 'retirada' ? 'Retirada' : 'Entrega') + ' ' + padNum(order.daily_number);
 
+// Pedido do iFood: linha de destaque com o número que o cliente vê no app do iFood.
+const ifoodLinha = (order) => (order.canal === 'ifood' ? '*** PEDIDO IFOOD' + (order.ifood_display_id ? ' #' + order.ifood_display_id : '') + ' ***' : null);
+
 // Expande linhas do pedido em unidades (qtd 2 => 2 papeis)
 function explode(items) {
   const units = [];
@@ -50,6 +53,7 @@ export function deliveryTicket(order, store) {
   t.align(1).bold(true).size(0x11).line(noAccent(store?.nome || 'ACAI MAIS SABOR'));
   t.size(0).line(retirada ? 'VIA DA RETIRADA' : 'VIA DO ENTREGADOR').bold(false);
   t.size(0x11).bold(true).line(pedidoLabel(order)).size(BODY).bold(false);
+  if (ifoodLinha(order)) t.bold(true).line(ifoodLinha(order)).bold(false);
   t.align(0).rule();
   t.line('Cliente: ' + order.customer_name);
   t.line('Tel: ' + order.customer_phone);
@@ -74,8 +78,20 @@ export function deliveryTicket(order, store) {
     t.bold(false).feed(1);
   }
   t.rule();
+  if (order.canal === 'ifood') {
+    const x = order.ifood_extra || {};
+    const receber = Number(x.a_receber) || 0;
+    t.size(0x11).bold(true);
+    (receber > 0 ? ['RECEBER: ' + money(receber)] : ['JA PAGO NO IFOOD', 'NAO COBRAR']).forEach((l) => t.line(l));
+    t.size(BODY).bold(false);
+    (x.pagamentos || []).forEach((pg) => wrap(noAccent(pg.rotulo + ': ' + money(pg.valor))).forEach((l) => t.line(l)));   // o troco sai na linha "Troco para" logo abaixo
+    (x.cupons || []).forEach((c) => wrap(noAccent('Cupom -' + money(c.valor) + ((c.patrocinio || []).length ? ' pago por ' + c.patrocinio.map((pp) => (pp.quem === 'IFOOD' ? 'iFood' : pp.quem === 'MERCHANT' ? 'loja' : pp.quem)).join('+') : ''))).forEach((l) => t.line(l)));
+    if (x.codigo_coleta) t.bold(true).line('Cod. coleta: ' + x.codigo_coleta).bold(false);
+    if (x.localizador) t.line('Localizador: ' + x.localizador);
+    if (x.cpf_cnpj) t.line('CPF/CNPJ na nota: ' + x.cpf_cnpj);
+  }
   const pg = { pix: 'PIX na entrega', cartao: 'Cartao na maquininha', dinheiro: 'Dinheiro' }[order.payment_method] || order.payment_method || '';
-  t.line('Pagamento: ' + pg);
+  if (order.canal !== 'ifood') t.line('Pagamento: ' + pg);
   if (order.payment_method === 'dinheiro' && order.change_for) {
     const troco = parseFloat(String(order.change_for).replace(',', '.')) - Number(order.total);
     t.line('Troco para: R$ ' + order.change_for + (isFinite(troco) ? '  (troco ' + money(troco) + ')' : ''));
@@ -126,6 +142,7 @@ export function productionTickets(order) {
   units.forEach((it, idx) => {
     const t = new Ticket();
     t.align(1).size(0x11).bold(true).line(pedidoLabel(order)).size(BODY).bold(false);
+    if (ifoodLinha(order)) t.bold(true).line(ifoodLinha(order)).bold(false);
     t.line('Producao ' + padNum(idx + 1) + ' - Item ' + String(idx + 1).padStart(2, '0') + ' de ' + String(total).padStart(2, '0'));
     t.align(0).rule();
     t.bold(true).size(0x11).line(it.nome).size(BODY).bold(false);
