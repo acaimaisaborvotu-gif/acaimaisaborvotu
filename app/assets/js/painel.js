@@ -120,7 +120,7 @@ function subscribeOrders() {
   channel?.unsubscribe();
   channel = client.channel('painel-orders')
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders', filter: `store_slug=eq.${STORE_SLUG}` }, (p) => {
-      orders.unshift(p.new); if (!p.new.ifood_teste) alertNew(); renderOrders();   // pedido da loja de TESTE do iFood não toca alarme
+      orders.unshift(p.new); if (!p.new.ifood_teste && p.new.status !== 'cancelado') alertNew(); renderOrders();   // pedido da loja de TESTE do iFood não toca alarme; pedido que já chega cancelado também não
     })
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders', filter: `store_slug=eq.${STORE_SLUG}` }, (p) => {
       const i = orders.findIndex((o) => o.id === p.new.id); if (i >= 0) orders[i] = p.new; renderOrders();
@@ -363,6 +363,7 @@ function orderCard(o) {
     el('div', { class: 'obody' }, [
       el('div', { class: 'ocust', text: o.customer_name }),
       el('div', { class: 'oinfo', text: `${o.customer_phone} · ${o.delivery_type === 'retirada' ? 'Retirada' : 'Entrega'}` }),
+      o.canal === 'ifood' ? ifoodCancelRecusado(o) : null,
       o.canal === 'ifood' ? ifoodDisputa(o) : null,
       o.canal === 'ifood' ? ifoodInfo(o) : null,
       // 1º pedido desse telefone: confira antes de mandar o entregador.
@@ -421,6 +422,19 @@ function painelTesteIfood(testes) {
     toast(`${data || 0} pedido(s) de teste apagado(s)`);
   } }));
   return box;
+}
+
+// O dono mandou cancelar e o iFood NÃO aceitou (prazo estourado, motivo que não vale pra esse
+// pedido...). O pedido continua valendo no iFood, então volta pro status de antes com este aviso.
+function ifoodCancelRecusado(o) {
+  const r = o.ifood_extra?.cancelamento_recusado;
+  if (!r) return null;
+  const hora = r.em ? new Date(r.em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '';
+  return el('div', { class: 'oinfo', style: 'background:#fdecea;color:#7a1c14;border:1px solid #f1b5ae;border-radius:8px;padding:6px 8px;margin:4px 0;display:grid;gap:2px' }, [
+    el('div', { style: 'font-weight:800', text: '⚠ O iFood NÃO cancelou este pedido. Ele continua valendo.' }),
+    el('div', { text: (r.motivo || 'O iFood recusou o cancelamento') + (hora ? ` (${hora})` : '') }),
+    el('div', { text: 'Entregue normalmente ou fale com o suporte do iFood.' }),
+  ]);
 }
 
 // Reclamação do cliente no iFood (plataforma de negociação). Tem prazo: sem resposta,
