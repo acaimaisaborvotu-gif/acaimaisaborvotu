@@ -7,6 +7,7 @@
 import { CONFIG, hasSupabase } from './config.js';
 import { sb, statusManualEfetivo } from './data.js';
 import { printer } from './printing.js';
+import { pedidoComValorLoja } from './ifood-valores.js';
 import * as SEED from './menu-data.js';
 import { el, money, toast, escapeHtml, imgUrl } from './util.js';
 import { renderClientes } from './crm.js';
@@ -268,8 +269,8 @@ function buildReportData() {
   const fmt = (dt) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(dt);
   const hoje = fmt(new Date());
   const doDia = orders.filter((o) => !o.ifood_teste).filter((o) => { try { return fmt(new Date(o.created_at)) === hoje; } catch (e) { return false; } });
-  const vendas = doDia.filter((o) => o.status !== 'cancelado');
-  const cancelados = doDia.filter((o) => o.status === 'cancelado');
+  const vendas = doDia.filter((o) => o.status !== 'cancelado').map(valorLoja);   // iFood entra com o valor do cardápio da loja
+  const cancelados = doDia.filter((o) => o.status === 'cancelado').map(valorLoja);
   const vendaComTaxa = vendas.reduce((s, o) => s + Number(o.total || 0), 0);
   const taxaTotal = vendas.reduce((s, o) => s + Number(o.delivery_fee || 0), 0);
   const hora = (o) => { try { return new Date(o.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; } };
@@ -385,7 +386,7 @@ function orderCard(o) {
         o.printed ? el('span', { class: 'tag-pay', style: 'background:rgba(43,174,102,.12);color:var(--ok)', text: '🖨 impresso' }) : null,
       ]),
       Number(o.discount) > 0 ? el('div', { class: 'oinfo', style: 'color:var(--ok)', text: `Desconto${o.coupon ? ' (' + o.coupon + ')' : ''}: -${money(o.discount)}` }) : null,
-      el('div', { class: 'ototal' }, [el('span', { text: 'Total' }), el('span', { text: money(o.total) })]),
+      ...totalCard(o),
     ]),
     el('div', { class: 'oactions' }, [
       el('button', { class: 'btn btn-ghost mini', style: 'flex:0 0 auto', html: '🖨', title: 'Reimprimir', onclick: () => doPrint(o) }),
@@ -395,6 +396,17 @@ function orderCard(o) {
     ]),
   ]);
   return card;
+}
+
+// Total do card. iFood: o valor do cardápio da loja (o que vai pro fechamento) e, embaixo, o que o cliente pagou no iFood.
+function totalCard(o) {
+  if (o.canal !== 'ifood') return [el('div', { class: 'ototal' }, [el('span', { text: 'Total' }), el('span', { text: money(o.total) })])];
+  const v = valorLoja(o)._valoresLoja;
+  return [
+    el('div', { class: 'ototal' }, [el('span', { text: 'Total (cardápio da loja)' }), el('span', { text: money(v.total) })]),
+    el('div', { class: 'oinfo', style: 'text-align:right', text: `Produtos ${money(v.subtotal)} + entrega ${money(v.entrega)} · no iFood: ${money(v.ifoodTotal)}` }),
+    v.confira.length ? el('div', { class: 'oinfo', style: 'background:#fdecea;color:#b4231c;border-radius:8px;padding:5px 8px;font-weight:700', text: '⚠ Confira o valor no cardápio: ' + v.confira.join(', ') }) : null,
+  ];
 }
 
 async function advance(o) {
@@ -505,7 +517,7 @@ async function cancelOrder(o) {
 
 async function doPrint(o) {
   try {
-    await printer.printOrder(o, store);
+    await printer.printOrder(valorLoja(o), store);
     await client.from('orders').update({ printed: true }).eq('id', o.id);
     o.printed = true; renderOrders();
     toast('Enviado pra impressora');
@@ -538,6 +550,8 @@ function alertNew() {
 
 // ---------------------------------------------------------------- Cardápio (editor)
 function currentMenu() { return cfg.menu || seedMenu(); }
+// Pedido do iFood com o valor do cardápio da LOJA (fechamento, sangria e comanda). Pedido do site volta igual.
+const valorLoja = (o) => pedidoComValorLoja(o, { menu: currentMenu(), settings: currentSettings() });
 function seedMenu() {
   const c = (x) => structuredClone(x); // cópia profunda: mergedSeed muta o resultado, então não pode tocar o módulo SEED
   return { RECIPIENTES: c(SEED.RECIPIENTES), BASES: c(SEED.BASES), ACOMPANHAMENTOS: c(SEED.ACOMPANHAMENTOS), COMBOS: c(SEED.COMBOS), DESTAQUES: c(SEED.DESTAQUES), FRAPE: c(SEED.FRAPE), MILKSHAKE: c(SEED.MILKSHAKE), SALADAS: c(SEED.SALADAS), SOBREMESAS: c(SEED.SOBREMESAS), BEBIDAS: c(SEED.BEBIDAS), CATEGORIAS: c(SEED.CATEGORIAS), FOTOS_SEED: { ...SEED.FOTOS_SEED }, categoriaFotos: { ...SEED.CATEGORIA_FOTOS }, esgotados: [], secao2: { ...SEED.SECAO2, itens: [] }, upsell: { ...SEED.UPSELL, itens: [] }, cupons: [...(SEED.CUPONS || [])], textos: { ...SEED.TEXTOS }, removidos: [] };

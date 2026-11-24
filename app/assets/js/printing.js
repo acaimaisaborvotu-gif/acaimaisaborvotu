@@ -46,12 +46,12 @@ function explode(items) {
 }
 
 // ---- Via do entregador (1 via) ----
-export function deliveryTicket(order, store) {
+export function deliveryTicket(order, store, rotulo) {
   const t = new Ticket();
   const totalItens = explode(order.items || []).length;
   const retirada = order.delivery_type === 'retirada';
   t.align(1).bold(true).size(0x11).line(noAccent(store?.nome || 'ACAI MAIS SABOR'));
-  t.size(0).line(retirada ? 'VIA DA RETIRADA' : 'VIA DO ENTREGADOR').bold(false);
+  t.size(0).line(rotulo || (retirada ? 'VIA DA RETIRADA' : 'VIA DO ENTREGADOR')).bold(false);
   t.size(0x11).bold(true).line(pedidoLabel(order)).size(BODY).bold(false);
   if (ifoodLinha(order)) t.bold(true).line(ifoodLinha(order)).bold(false);
   t.align(0).rule();
@@ -84,8 +84,9 @@ export function deliveryTicket(order, store) {
     t.size(0x11).bold(true);
     (receber > 0 ? ['RECEBER: ' + money(receber)] : ['JA PAGO NO IFOOD', 'NAO COBRAR']).forEach((l) => t.line(l));
     t.size(BODY).bold(false);
-    (x.pagamentos || []).forEach((pg) => wrap(noAccent(pg.rotulo + ': ' + money(pg.valor))).forEach((l) => t.line(l)));   // o troco sai na linha "Troco para" logo abaixo
-    (x.cupons || []).forEach((c) => wrap(noAccent('Cupom -' + money(c.valor) + ((c.patrocinio || []).length ? ' pago por ' + c.patrocinio.map((pp) => (pp.quem === 'IFOOD' ? 'iFood' : pp.quem === 'MERCHANT' ? 'loja' : pp.quem)).join('+') : ''))).forEach((l) => t.line(l)));
+    if (order._valoresLoja) t.line('Valores do cardapio da loja');   // o valor do iFood fica so no painel
+    else (x.pagamentos || []).forEach((pg) => wrap(noAccent(pg.rotulo + ': ' + money(pg.valor))).forEach((l) => t.line(l)));   // o troco sai na linha "Troco para" logo abaixo
+    if (!order._valoresLoja) (x.cupons || []).forEach((c) => wrap(noAccent('Cupom -' + money(c.valor) + ((c.patrocinio || []).length ? ' pago por ' + c.patrocinio.map((pp) => (pp.quem === 'IFOOD' ? 'iFood' : pp.quem === 'MERCHANT' ? 'loja' : pp.quem)).join('+') : ''))).forEach((l) => t.line(l)));
     if (x.codigo_coleta) t.bold(true).line('Cod. coleta: ' + x.codigo_coleta).bold(false);
     if (x.localizador) t.line('Localizador: ' + x.localizador);
     if (x.cpf_cnpj) t.line('CPF/CNPJ na nota: ' + x.cpf_cnpj);
@@ -283,7 +284,10 @@ export const printer = {
   // Imprime: vias do entregador + via das bebidas (grampear junto) + vias de produção (1 por item, sem bebida)
   async printOrder(order, store) {
     // 1 via do entregador, tanto na entrega quanto na retirada.
-    const vias = [deliveryTicket(order, store)];
+    // iFood: 2 vias (pedido do Djalma, 24/11/2026): uma fica na caixinha do iFood pra sangria, a outra vai com o entregador.
+    const vias = order.canal === 'ifood'
+      ? [deliveryTicket(order, store, 'VIA CAIXA IFOOD (SANGRIA)'), deliveryTicket(order, store)]
+      : [deliveryTicket(order, store)];
     const bebida = bebidaTicket(order); // sai logo após a via do entregador, pra grampear junto
     const jobs = [...vias, ...(bebida ? [bebida] : []), ...productionTickets(order)];
     if (pcfg.method === 'serial') { for (const j of jobs) { await this.writeSerial(j); await new Promise((r) => setTimeout(r, 250)); } }
