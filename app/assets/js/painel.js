@@ -8,6 +8,7 @@ import { CONFIG, hasSupabase } from './config.js';
 import { sb, statusManualEfetivo } from './data.js';
 import { printer } from './printing.js';
 import { pedidoComValorLoja } from './ifood-valores.js';
+import { vigiarVersao, voltouDeAtualizacao } from './painel-versao.js';
 import * as SEED from './menu-data.js';
 import { el, money, toast, escapeHtml, imgUrl } from './util.js';
 import { renderClientes } from './crm.js';
@@ -78,6 +79,28 @@ async function loadAll() {
   subscribeOrders();
   startAutoRefresh();
   document.addEventListener('click', unlockAudio, { once: true });
+  if (voltouDeAtualizacao()) avisoSomDepoisDeAtualizar();
+  vigiarVersao(podeRecarregar);
+}
+
+// Recarga automática (painel-versao.js) só quando não atrapalha ninguém.
+let imprimindo = false;
+function podeRecarregar() {
+  if (tab !== 'pedidos' || imprimindo || !session) return false;
+  const foco = document.activeElement;
+  if (foco && /^(INPUT|TEXTAREA|SELECT)$/.test(foco.tagName)) return false;
+  return !orders.some((o) => o.status === 'novo' && !o.ifood_teste);   // pedido esperando aceite: espera aceitarem
+}
+// Depois da recarga o navegador pode bloquear o som até alguém tocar na tela.
+function avisoSomDepoisDeAtualizar() {
+  let ctx;
+  try { ctx = audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); } catch { return; }
+  if (ctx.state === 'running') { toast('Painel atualizado ✓'); return; }
+  const faixa = el('div', { style: 'position:fixed;left:0;right:0;top:0;z-index:100;background:#c0392b;color:#fff;font-weight:800;text-align:center;padding:14px 12px;cursor:pointer;font-size:1rem',
+    text: '🔔 Painel atualizado. TOQUE AQUI para ligar o som dos pedidos' });
+  const ligar = () => { unlockAudio(); faixa.remove(); document.removeEventListener('click', ligar, true); };
+  document.addEventListener('click', ligar, true);
+  document.body.append(faixa);
 }
 
 async function loadOrders() {
@@ -516,6 +539,7 @@ async function cancelOrder(o) {
 }
 
 async function doPrint(o) {
+  imprimindo = true;
   try {
     await printer.printOrder(valorLoja(o), store);
     await client.from('orders').update({ printed: true }).eq('id', o.id);
@@ -526,7 +550,7 @@ async function doPrint(o) {
     const m = String(e.message || '');
     if (/impressora|qz|conectad|escolha|carregar/i.test(m)) toast('Configure a impressora na aba Impressora');
     else toast('Falha ao imprimir: ' + m);
-  }
+  } finally { imprimindo = false; }
 }
 
 let audioCtx;
